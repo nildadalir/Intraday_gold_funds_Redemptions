@@ -1,4 +1,4 @@
-"""Fund valuation logic (retail board last/NAV/legal volume)."""
+"""Fund valuation: main board for price/NAV; retail board for legal volume."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 import config
 from market_hours import gold_market_is_open, gold_market_status_message
 from tsetmc_client import (
+    SearchHit,
     TsetmcClient,
     TsetmcDataError,
     TsetmcError,
@@ -20,6 +21,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 Category = Literal["Redemption", "Issue/Redemption"]
+BoardKind = Literal["main", "retail"]
+
+# Excel stores large TseIds as float64; BI exports often drift by tens–hundreds.
+_EXCEL_FLOAT_TSEID_TOLERANCE = 512
 
 
 @dataclass(frozen=True)
@@ -100,8 +105,23 @@ def _normalize_symbol(value: str) -> str:
     return value.translate(trans).strip()
 
 
-# Excel stores large TseIds as float64; BI exports often drift by tens–hundreds.
-_EXCEL_FLOAT_TSEID_TOLERANCE = 512
+def _board_label(hit: SearchHit) -> str:
+    return f"{hit.flow_title} {hit.market_title}"
+
+
+def _is_main_board(hit: SearchHit) -> bool:
+    label = _board_label(hit)
+    return "اصلی" in label
+
+
+def _is_retail_board(hit: SearchHit) -> bool:
+    label = _board_label(hit)
+    return "خرده" in label
+
+
+def _cache_key(symbol: str, board: BoardKind) -> str:
+    sym = symbol.strip()
+    return sym if board == "main" else f"{sym}#retail"
 
 
 def _ins_code_from_pytse_map(fund_symbol: str) -> str | None:
@@ -118,147 +138,179 @@ def _ins_code_from_pytse_map(fund_symbol: str) -> str | None:
         return None
 
 
-def resolve_fund_ins_code(
+def _excel_near(candidate: str, excel_tse_id: int | str | None) -> bool:
+    if excel_tse_id is None:
+        return True
+    try:
+        return (
+            abs(int(candidate) - int(str(excel_tse_id).strip()))
+            <= _EXCEL_FLOAT_TSEID_TOLERANCE
+        )
+    except ValueError:
+        return False
+
+
+def _pick_from_hits(
+    hits: list[SearchHit],
+    *,
+    fund_symbol: str,
+    board: BoardKind,
+    excel_tse_id: int | str | None = None,
+) -> str | None:
+    """Pick insCode for main (اصلی) or retail (خرده) from exact symbol hits."""
+    fund_norm = _normalize_symbol(fund_symbol)
+    exact = [h for h in hits if _normalize_symbol(h.symbol) == fund_norm]
+    if not exact:
+        return None
+    active = [h for h in exact if h.is_active] or exact
+
+    if board == "retail":
+        pool = [h for h in active if _is_retail_board(h)]
+        if not pool:
+            return None
+    else:
+        pool = [h for h in active if _is_main_board(h)]
+        if not pool:
+            # Main BI row may still match Excel even when title lacks "اصلی".
+            pool = list(active)
+
+    if excel_tse_id is not None and board == "main":
+        excel_s = str(excel_tse_id).strip()
+        for hit in pool:
+            if hit.ins_code == excel_s:
+                return hit.ins_code
+        try:
+            excel_i = int(excel_s)
+        except ValueError:
+            excel_i = None
+        if excel_i is not None:
+            ranked = sorted(pool, key=lambda h: abs(int(h.ins_code) - excel_i))
+            best = ranked[0]
+            if abs(int(best.ins_code) - excel_i) <= _EXCEL_FLOAT_TSEID_TOLERANCE:
+                return best.ins_code
+            # Prefer nearest main/search hit even when Excel drifted a lot.
+            return best.ins_code
+
+    return pool[0].ins_code
+
+
+def resolve_board_ins_code(
     client: TsetmcClient,
     fund_symbol: str,
+    *,
+    board: BoardKind,
     excel_tse_id: int | str | None = None,
+    hits: list[SearchHit] | None = None,
 ) -> str:
     """
-    Resolve the retail/main fund share insCode via TSETMC search.
-
-    BI Excel TseId is often float-corrupted (16–17 digit IDs). Prefer an
-    exact search hit for the fund symbol (خرده فروشی / اصلی when available);
-    use Excel only as a near-match hint. Falls back to pytse_client's static
-    symbol map when search has no hit. Tries the offline map / local cache
-    first when within Excel float tolerance (avoids a network search).
+    Resolve insCode for either the main board (price/NAV) or retail board
+    (legal volume / خرده فروشی).
     """
     from inscode_cache import get_cached_ins_code, put_cached_ins_code
 
-    def _excel_near(candidate: str) -> bool:
-        if excel_tse_id is None:
-            return True
-        try:
-            return (
-                abs(int(candidate) - int(str(excel_tse_id).strip()))
-                <= _EXCEL_FLOAT_TSEID_TOLERANCE
+    key = _cache_key(fund_symbol, board)
+    # Excel TseId is the main board only — never use it to validate retail cache.
+    excel_for_board = excel_tse_id if board == "main" else None
+
+    if board == "main":
+        mapped = _ins_code_from_pytse_map(fund_symbol)
+        if mapped and _excel_near(mapped, excel_for_board):
+            logger.info(
+                "Resolved MAIN insCode for %s via pytse map: %s",
+                fund_symbol,
+                mapped,
             )
-        except ValueError:
-            return False
+            put_cached_ins_code(key, mapped)
+            return mapped
 
-    mapped = _ins_code_from_pytse_map(fund_symbol)
-    if mapped and _excel_near(mapped):
+    cached = get_cached_ins_code(key)
+    if cached and (board == "retail" or _excel_near(cached, excel_for_board)):
         logger.info(
-            "Resolved fund insCode for %s via pytse map "
-            "(Excel near-match): %s",
-            fund_symbol,
-            mapped,
-        )
-        put_cached_ins_code(fund_symbol, mapped)
-        return mapped
-
-    cached = get_cached_ins_code(fund_symbol)
-    if cached and _excel_near(cached):
-        logger.info(
-            "Resolved fund insCode for %s via local cache: %s",
+            "Resolved %s insCode for %s via local cache: %s",
+            board.upper(),
             fund_symbol,
             cached,
         )
         return cached
 
-    hits = client.search_instruments(fund_symbol)
-    fund_norm = _normalize_symbol(fund_symbol)
-    exact = [h for h in hits if _normalize_symbol(h.symbol) == fund_norm]
-    if not exact:
+    search_hits = hits if hits is not None else client.search_instruments(fund_symbol)
+    chosen = _pick_from_hits(
+        search_hits,
+        fund_symbol=fund_symbol,
+        board=board,
+        excel_tse_id=excel_for_board,
+    )
+    if chosen:
+        logger.info(
+            "Resolved %s insCode for %s via search: %s",
+            board.upper(),
+            fund_symbol,
+            chosen,
+        )
+        put_cached_ins_code(key, chosen)
+        return chosen
+
+    if board == "main":
+        mapped = _ins_code_from_pytse_map(fund_symbol)
         if mapped:
             logger.warning(
-                "No search hit for %s; using pytse map insCode %s",
+                "No main search hit for %s; using pytse map %s",
                 fund_symbol,
                 mapped,
             )
-            put_cached_ins_code(fund_symbol, mapped)
+            put_cached_ins_code(key, mapped)
             return mapped
         if cached:
-            logger.warning(
-                "No search hit for %s; using cached insCode %s",
-                fund_symbol,
-                cached,
-            )
             return cached
+        if excel_tse_id is not None:
+            logger.warning(
+                "No main search hit for %s; falling back to Excel TseId %s",
+                fund_symbol,
+                excel_tse_id,
+            )
+            return str(excel_tse_id).strip()
         raise TsetmcDataError(
-            f"No TSETMC search hit for fund symbol {fund_symbol!r}"
+            f"No TSETMC main-board insCode for fund symbol {fund_symbol!r}"
         )
-    pool = [h for h in exact if h.is_active] or exact
 
-    # Prefer retail / main board for last price / NAV / legal volume
-    preferred = [
-        h
-        for h in pool
-        if ("خرده" in f"{h.flow_title} {h.market_title}")
-        or ("اصلی" in f"{h.flow_title} {h.market_title}")
-    ]
-    if preferred:
-        pool = preferred
-
-    if excel_tse_id is None:
-        chosen = pool[0]
-        logger.info(
-            "Resolved fund insCode for %s via search: %s",
-            fund_symbol,
-            chosen.ins_code,
-        )
-        put_cached_ins_code(fund_symbol, chosen.ins_code)
-        return chosen.ins_code
-
-    excel_s = str(excel_tse_id).strip()
-    for hit in pool:
-        if hit.ins_code == excel_s:
-            logger.info(
-                "Fund insCode for %s matches Excel TseId: %s",
-                fund_symbol,
-                excel_s,
-            )
-            put_cached_ins_code(fund_symbol, hit.ins_code)
-            return hit.ins_code
-
-    try:
-        excel_i = int(excel_s)
-    except ValueError:
-        excel_i = None
-
-    if excel_i is not None:
-        ranked = sorted(pool, key=lambda h: abs(int(h.ins_code) - excel_i))
-        best = ranked[0]
-        delta = abs(int(best.ins_code) - excel_i)
-        if delta <= _EXCEL_FLOAT_TSEID_TOLERANCE:
-            logger.warning(
-                "Excel TseId %s looks float-corrupted for %s; "
-                "using search insCode %s (delta=%s)",
-                excel_s,
-                fund_symbol,
-                best.ins_code,
-                delta,
-            )
-        else:
-            logger.warning(
-                "Excel TseId %s differs from search insCode %s for %s "
-                "(delta=%s); preferring search",
-                excel_s,
-                best.ins_code,
-                fund_symbol,
-                delta,
-            )
-        put_cached_ins_code(fund_symbol, best.ins_code)
-        return best.ins_code
-
-    chosen = pool[0]
-    logger.warning(
-        "Unusable Excel TseId %r for %s; using search insCode %s",
-        excel_tse_id,
-        fund_symbol,
-        chosen.ins_code,
+    raise TsetmcDataError(
+        f"No TSETMC retail (خرده فروشی) board for fund symbol {fund_symbol!r}"
     )
-    put_cached_ins_code(fund_symbol, chosen.ins_code)
-    return chosen.ins_code
+
+
+def resolve_fund_ins_code(
+    client: TsetmcClient,
+    fund_symbol: str,
+    excel_tse_id: int | str | None = None,
+) -> str:
+    """Backward-compatible alias: resolve MAIN board insCode."""
+    return resolve_board_ins_code(
+        client, fund_symbol, board="main", excel_tse_id=excel_tse_id
+    )
+
+
+def resolve_main_and_retail_ins_codes(
+    client: TsetmcClient,
+    fund_symbol: str,
+    excel_tse_id: int | str | None = None,
+) -> tuple[str, str]:
+    """One search → main (price/NAV) + retail (legal volume) insCodes."""
+    hits = client.search_instruments(fund_symbol)
+    main_code = resolve_board_ins_code(
+        client,
+        fund_symbol,
+        board="main",
+        excel_tse_id=excel_tse_id,
+        hits=hits,
+    )
+    retail_code = resolve_board_ins_code(
+        client,
+        fund_symbol,
+        board="retail",
+        excel_tse_id=None,
+        hits=hits,
+    )
+    return main_code, retail_code
 
 
 def value_fund(
@@ -271,57 +323,61 @@ def value_fund(
     instrument_code: str = "",
 ) -> ValuationResult:
     logger.info("Processing %s", symbol)
-    logger.info("Excel TseId: %s", tse_id)
+    logger.info("Excel TseId (main board): %s", tse_id)
     logger.info("%s", gold_market_status_message())
 
     try:
-        resolved_code = resolve_fund_ins_code(client, symbol, tse_id)
+        main_code, retail_code = resolve_main_and_retail_ins_codes(
+            client, symbol, tse_id
+        )
     except TsetmcError as exc:
         from inscode_cache import get_cached_ins_code
 
-        mapped = _ins_code_from_pytse_map(symbol)
-        cached = get_cached_ins_code(symbol)
-        if mapped:
-            logger.warning(
-                "insCode search failed for %s (%s); using pytse map %s",
-                symbol,
-                exc,
-                mapped,
-            )
-            resolved_code = mapped
-        elif cached:
-            logger.warning(
-                "insCode search failed for %s (%s); using cache %s",
-                symbol,
-                exc,
-                cached,
-            )
-            resolved_code = cached
-        else:
-            logger.warning(
-                "insCode search failed for %s (%s); falling back to Excel TseId %s",
-                symbol,
-                exc,
-                tse_id,
-            )
-            resolved_code = str(tse_id)
-    resolved_tse_id = int(resolved_code)
-    if resolved_tse_id != int(tse_id):
+        main_code = (
+            get_cached_ins_code(_cache_key(symbol, "main"))
+            or _ins_code_from_pytse_map(symbol)
+            or str(tse_id)
+        )
+        retail_cached = get_cached_ins_code(_cache_key(symbol, "retail"))
+        if retail_cached is None:
+            raise TsetmcDataError(
+                f"Could not resolve retail (خرده فروشی) board for {symbol}: {exc}"
+            ) from exc
+        retail_code = retail_cached
         logger.warning(
-            "Using search insCode %s instead of Excel TseId %s for %s",
-            resolved_tse_id,
+            "Board resolve partially failed for %s (%s); "
+            "main=%s retail(cache)=%s",
+            symbol,
+            exc,
+            main_code,
+            retail_code,
+        )
+
+    main_tse_id = int(main_code)
+    retail_tse_id = validate_live_market_tseid(str(retail_code))
+    if main_tse_id != int(tse_id):
+        logger.warning(
+            "Using MAIN insCode %s instead of Excel TseId %s for %s",
+            main_tse_id,
             tse_id,
             symbol,
         )
-    else:
-        logger.info("TseId: %s", resolved_tse_id)
+    logger.info("MAIN board (price/NAV): %s (%s)", symbol, main_tse_id)
+    logger.info("RETAIL board (legal volume): %s (%s)", symbol, retail_tse_id)
+    if str(main_tse_id) == str(retail_tse_id):
+        logger.warning(
+            "Main and retail insCodes are identical for %s (%s) — "
+            "verify TSETMC search titles (اصلی vs خرده)",
+            symbol,
+            main_tse_id,
+        )
 
-    last_price = client.get_last_trade_price(resolved_tse_id)
+    last_price = client.get_last_trade_price(main_tse_id)
     logger.info(
         "Last Price: %s", int(last_price) if last_price.is_integer() else last_price
     )
 
-    nav = client.get_etf_nav(resolved_tse_id)
+    nav = client.get_etf_nav(main_tse_id)
     logger.info("NAV Redemption: %s", nav.redemption)
     logger.info(
         "NAV Issue/Redemption: %s",
@@ -341,15 +397,13 @@ def value_fund(
     logger.info("Category: %s", category)
     logger.info("Selected Price: %s", selected_price)
 
-    # Legal volume from the retail (خرده فروشی) board — same instrument as
-    # last price / NAV — not from the market-maker {symbol}2 page.
-    retail_tse_id = validate_live_market_tseid(str(resolved_tse_id))
-    logger.info("Retail board for legal volume: %s (%s)", symbol, retail_tse_id)
-
+    # Legal volume ONLY from retail (خرده فروشی) board — not main / not *2.
     client_type = client.get_client_type(retail_tse_id)
     legal_buy = client_type.buy_n_volume
     legal_sell = client_type.sell_n_volume
-    warnings: list[str] = []
+    warnings: list[str] = [
+        f"legal volume from retail board (خرده فروشی) insCode={retail_tse_id}"
+    ]
     if not gold_market_is_open():
         warnings.append(
             f"gold market closed (Tehran session Sat–Wed "
@@ -389,7 +443,7 @@ def value_fund(
 
     return ValuationResult(
         symbol=symbol,
-        tse_id=resolved_tse_id,
+        tse_id=main_tse_id,
         last_trade_price=last_price,
         nav_redemption=nav.redemption,
         nav_issue=nav.issue,

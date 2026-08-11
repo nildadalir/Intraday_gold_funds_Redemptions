@@ -72,12 +72,14 @@ poc:
 mock:
   atash:
     symbol: "آتش"
+    # MAIN board (price / NAV) — matches BI Excel TseId
     tse_id: "56987424987755487"
     last_price: 33201
     nav_redemption: 33277
     nav_issue_redemption: null
     market_symbol: "آتش"
-    market_tse_id: "56987424987755487"
+    # RETAIL board (خرده فروشی) — legal volume only (distinct insCode)
+    market_tse_id: "56987424987755999"
     legal_buy_volume: 18485000
     legal_sell_volume: 16362000
 

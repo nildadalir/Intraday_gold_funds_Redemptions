@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 _CACHE: dict[str, str] | None = None
 
-# Seed known retail/main-board codes (Excel float often corrupts the last digits).
+# Seed known MAIN-board codes (Excel float often corrupts the last digits).
+# Retail (خرده فروشی) codes are cached as "<symbol>#retail" after first resolve.
 _SEED: dict[str, str] = {
     "آتش": "56987424987755487",
 }

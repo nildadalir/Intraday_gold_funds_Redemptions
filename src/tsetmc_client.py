@@ -758,28 +758,27 @@ class MockTsetmcClient(TsetmcClient):
         )
 
     def search_instruments(self, query: str) -> list[SearchHit]:
-        market = str(self._mock["market_symbol"])
         fund = str(self._mock["symbol"])
-        market_code = str(self._mock["market_tse_id"])
-        fund_code = str(self._mock["tse_id"])
+        main_code = str(self._mock["tse_id"])
+        retail_code = str(self._mock["market_tse_id"])
         hits = [
             SearchHit(
-                ins_code=fund_code,
+                ins_code=main_code,
                 symbol=fund,
                 name=f"صندوق {fund}",
-                flow=3,
-                flow_title="خرده فروشی",
-                market_title="خرده فروشی",
+                flow=1,
+                flow_title="بورس کالا",
+                market_title="بازار معاملات اصلی",
                 last_date=20260810,
                 is_active=True,
             ),
             SearchHit(
-                ins_code=market_code,
-                symbol=market,
-                name=f"بازار {fund}",
-                flow=1,
-                flow_title="بورس کالا",
-                market_title="بازار معاملات اصلی",
+                ins_code=retail_code,
+                symbol=fund,
+                name=f"صندوق {fund} خرده",
+                flow=3,
+                flow_title="خرده فروشی",
+                market_title="خرده فروشی",
                 last_date=20260810,
                 is_active=True,
             ),
@@ -789,7 +788,7 @@ class MockTsetmcClient(TsetmcClient):
 
     def get_instrument_info(self, ins_code: int | str) -> dict[str, Any]:
         if str(ins_code) == str(self._mock["market_tse_id"]):
-            return {"lVal18AFC": self._mock["market_symbol"], "insCode": str(ins_code)}
+            return {"lVal18AFC": self._mock["symbol"], "insCode": str(ins_code)}
         if str(ins_code) == str(self._mock["tse_id"]):
             return {"lVal18AFC": self._mock["symbol"], "insCode": str(ins_code)}
         raise TsetmcDataError(f"Mock instrumentInfo missing for {ins_code}")
@@ -810,7 +809,12 @@ class MockTsetmcClient(TsetmcClient):
         )
 
     def _require_atash(self, ins_code: int | str) -> None:
-        if str(ins_code) not in {str(self._mock["tse_id"]), str(config.POC_TSE_ID)}:
+        allowed = {
+            str(self._mock["tse_id"]),
+            str(self._mock["market_tse_id"]),
+            str(config.POC_TSE_ID),
+        }
+        if str(ins_code) not in allowed:
             raise TsetmcDataError(
                 f"Mock mode only supports آتش (got insCode={ins_code})"
             )

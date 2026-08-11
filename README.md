@@ -95,25 +95,30 @@ Important keys:
 
 ## Valuation rules
 
-All fields come from the **main / retail board** of the instrument
-(`Market` = **بازار معاملات اصلی** / خرده فروشی), e.g. `آتش` — **not** from
-`{symbol}2` / `{symbol}3` / `{symbol}4` boards (آد-لات / جبرانی / بلوکی).
+Use **two boards** per fund:
+
+| Board | TSETMC label | Used for |
+|--------|--------------|----------|
+| **Main** | بازار معاملات اصلی (BI Excel row) | Last price, NAV, category / selected price |
+| **Retail** | **خرده فروشی** (separate `insCode`) | Legal volume only (`buy_N_Volume`) |
+
+Do **not** take legal volume from the main board, and do **not** use `{symbol}2` / بازارگردان / آد-لات / جبرانی / بلوکی.
 
 | Field | Source |
 |--------|--------|
-| Last trade price | Main/retail board last price |
-| NAV redemption | ETF `pRedTran` |
-| NAV issue/redemption | ETF `pSubTran` |
-| Legal volume | Main/retail حقیقی/حقوقی → **`buy_N_Volume`** |
+| Last trade price | **Main** board last price |
+| NAV redemption | **Main** ETF `pRedTran` |
+| NAV issue/redemption | **Main** ETF `pSubTran` |
+| Legal volume | **Retail** حقیقی/حقوقی → **`buy_N_Volume`** |
 
 Business logic:
 
-1. **Legal volume** = `buy_N_Volume`. If buy ≠ sell, still use buy; log sell and add a warning.
-2. **Category**
+1. **Legal volume** = retail `buy_N_Volume`. If buy ≠ sell, still use buy; log sell and add a warning.
+2. **Category** (from main-board last vs NAV)
    - If `last_price <= nav_redemption` → **Redemption** → selected price = redemption NAV
    - Else → **Issue/Redemption** → selected price = **issue/redemption NAV** (`pSubTran`)
-3. **Fund value** = `legal_buy_volume × selected_price`
-4. **insCode**: Excel `TseId` is often float64-corrupted. Resolve via pytse map / local cache / TSETMC search (prefer خرده/اصلی).
+3. **Fund value** = `retail_legal_buy_volume × selected_price`
+4. **insCode**: Excel `TseId` is the **main** board (often float-corrupted). Resolve main via search/cache (prefer اصلی). Resolve retail separately (prefer خرده فروشی). Cached as `symbol` and `symbol#retail`.
 5. **Batch**: process **primary** BI rows only; never abort on one fund failure; always write HTML with Error Summary. Skip NULL `TseId` rows and list them as errors.
 6. **Live mode**: forbid mock TseIds (`999…`, `888…`).
 7. **HTML**: market OPEN/CLOSED banner + legal-volume as-of; `Calculated Value (Rial)` and **DoD %** vs prior `data/history/values_*.json`.

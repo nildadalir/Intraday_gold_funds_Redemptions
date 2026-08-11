@@ -76,6 +76,55 @@ class TestMarketHours:
         assert gold_market_is_open(now) is False
 
 
+class TestBoardPick:
+    def test_pick_main_vs_retail(self) -> None:
+        from fund_calculator import _pick_from_hits
+        from tsetmc_client import SearchHit
+
+        hits = [
+            SearchHit(
+                ins_code="111",
+                symbol="آتش",
+                name="main",
+                flow=1,
+                flow_title="",
+                market_title="بازار معاملات اصلی",
+                last_date=20260811,
+                is_active=True,
+            ),
+            SearchHit(
+                ins_code="222",
+                symbol="آتش",
+                name="retail",
+                flow=3,
+                flow_title="خرده فروشی",
+                market_title="خرده فروشی",
+                last_date=20260811,
+                is_active=True,
+            ),
+        ]
+        assert _pick_from_hits(hits, fund_symbol="آتش", board="main") == "111"
+        assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") == "222"
+
+    def test_retail_missing(self) -> None:
+        from fund_calculator import _pick_from_hits
+        from tsetmc_client import SearchHit
+
+        hits = [
+            SearchHit(
+                ins_code="111",
+                symbol="آتش",
+                name="main",
+                flow=1,
+                flow_title="",
+                market_title="بازار معاملات اصلی",
+                last_date=20260811,
+                is_active=True,
+            ),
+        ]
+        assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") is None
+
+
 class TestHistory:
     def test_change_pct(self) -> None:
         assert value_change_pct(110, 100) == pytest.approx(10.0)
