@@ -55,7 +55,7 @@ market_hours:
     - monday
     - tuesday
     - wednesday
-  open_time: "11:45"
+  open_time: "12:00"
   close_time: "18:00"
 
 poc:

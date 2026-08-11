@@ -350,7 +350,8 @@ def value_fund(
     warnings: list[str] = []
     if not gold_market_is_open():
         warnings.append(
-            "gold market closed (Tehran session Sat–Wed 11:45–18:00); "
+            f"gold market closed (Tehran session Sat–Wed "
+            f"{config.MARKET_OPEN_TIME}–{config.MARKET_CLOSE_TIME}); "
             "used last available session data where live boards were empty"
         )
     if client_type.as_of_date and client_type.source not in {

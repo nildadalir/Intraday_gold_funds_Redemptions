@@ -77,7 +77,7 @@ Important keys:
 - `api.proxy`: `${TSETMC_PROXY}`
 - `features.use_mock_data`: offline calculation without TSETMC
 - `batch.enabled`: allow `--all`
-- `market_hours`: gold ETF session (default Sat–Wed **11:45–18:00** `Asia/Tehran`)
+- `market_hours`: gold ETF session (default Sat–Wed **12:00–18:00** `Asia/Tehran`)
 
 ## Valuation rules
 
@@ -106,7 +106,7 @@ Business logic:
 
 ### Gold market hours
 
-Gold funds trade **Saturday–Wednesday, 11:45–18:00 Tehran time**. Outside that window, live TSETMC boards often show zeros/blank fields. The pipeline logs session status and prefers **ClientType / price history** for the last session with data.
+Gold funds trade **Saturday–Wednesday, 12:00–18:00 Tehran time**. Outside that window, live TSETMC boards often show zeros/blank fields. The pipeline logs session status and prefers **ClientType / price history** for the last session with data.
 
 ### Performance knobs
 

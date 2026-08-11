@@ -94,7 +94,7 @@ MARKET_OPEN_WEEKDAYS: list[str] = list(
     _MH.get("open_weekdays")
     or ["saturday", "sunday", "monday", "tuesday", "wednesday"]
 )
-MARKET_OPEN_TIME = str(_MH.get("open_time", "11:45"))
+MARKET_OPEN_TIME = str(_MH.get("open_time", "12:00"))
 MARKET_CLOSE_TIME = str(_MH.get("close_time", "18:00"))
 
 _POC = _CFG.get("poc") or {}

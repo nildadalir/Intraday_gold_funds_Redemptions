@@ -28,7 +28,7 @@ def gold_market_is_open(now: datetime | None = None) -> bool:
     """
     True when gold ETF market is in the configured Tehran session.
 
-    Default: Saturday–Wednesday, 11:45–18:00 Asia/Tehran.
+    Default: Saturday–Wednesday, 12:00–18:00 Asia/Tehran.
     Outside this window TSETMC live boards often show zeros / empty fields;
     prefer ClientType / price history.
     """

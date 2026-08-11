@@ -348,7 +348,7 @@ class TsetmcClient:
         Legal/individual volumes for an instrument (retail board).
 
         Intraday GetClientType is often all-zero before/after the gold session
-        (Sat–Wed 11:45–18:00 Tehran); fall back to history.
+        (Sat–Wed session from config; default 12:00–18:00 Tehran); fall back to history.
         """
         from market_hours import gold_market_is_open, gold_market_status_message
 
