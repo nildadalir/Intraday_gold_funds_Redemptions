@@ -115,12 +115,23 @@ def _is_main_board(hit: SearchHit) -> bool:
 
 
 def _is_retail_board(hit: SearchHit) -> bool:
-    """TSETMC retail share board (خرده فروشی)."""
+    """
+    Board used for legal volume on TSETMC.
+
+    Gold ETF shares usually appear as a single instrument with flow=7 and
+    market title "صندوق های کالایی" (website UI may still say خرده فروشی).
+    There is typically no second searchable insCode labeled خرده.
+    """
     label = _board_label(hit)
     if "خرده" in label:
         return True
-    # Commodity / gold ETF retail flow is commonly flow=3 on TSETMC.
-    if hit.flow == 3 and "بازارگردان" not in label and "گردانی" not in label:
+    if "بازارگردان" in label or "گردانی" in label:
+        return False
+    # Commodity / gold ETF traded share (TSETMC flow 7).
+    if hit.flow == 7 and "کالایی" in label:
+        return True
+    # Older equity-style retail flow.
+    if hit.flow == 3 and "کالایی" not in label:
         return True
     return False
 
@@ -223,7 +234,21 @@ def _pick_from_hits(
     if board == "retail":
         pool = [h for h in active if _is_retail_board(h)]
         if not pool:
-            return None
+            # Last resort: sole exact symbol hit that is not a *2/*3/*4 MM board.
+            if len(active) == 1 and not _normalize_symbol(active[0].symbol).endswith(
+                ("2", "3", "4")
+            ):
+                logger.warning(
+                    "No explicit retail/خرده hit for %s; using sole exact "
+                    "symbol insCode %s (%s | %s)",
+                    fund_symbol,
+                    active[0].ins_code,
+                    active[0].flow_title,
+                    active[0].market_title,
+                )
+                pool = list(active)
+            else:
+                return None
     else:
         pool = [h for h in active if _is_main_board(h)]
         if not pool:

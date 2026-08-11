@@ -95,14 +95,14 @@ Important keys:
 
 ## Valuation rules
 
-Use **two boards** per fund:
+Use **two concepts** per fund:
 
-| Board | TSETMC label | Used for |
-|--------|--------------|----------|
-| **Main** | بازار معاملات اصلی (BI Excel row) | Last price, NAV, category / selected price |
-| **Retail** | **خرده فروشی** (separate `insCode`) | Legal volume only (`buy_N_Volume`) |
+| Role | How we resolve it | Used for |
+|------|-------------------|----------|
+| **Main** | BI Excel `TseId` (بازار معاملات اصلی), float-corrected via search/cache | Last price, NAV, category / selected price |
+| **Retail / traded share** | TSETMC exact symbol hit — for gold ETFs usually `flow=7` / **صندوق های کالایی** (website may label it خرده فروشی). Not `{symbol}2` بازارگردان. | Legal volume only (`buy_N_Volume`) |
 
-Do **not** take legal volume from the main board, and do **not** use `{symbol}2` / بازارگردان / آد-لات / جبرانی / بلوکی.
+For most gold ETFs, main and retail resolve to the **same** `insCode` (one traded share). Legal volume still comes from CDN `GetClientType` on that share — not from pytse `instinfofast` alone.
 
 | Field | Source |
 |--------|--------|

@@ -124,15 +124,36 @@ class TestBoardPick:
             SearchHit(
                 ins_code="222",
                 symbol="آتش",
-                name="retail",
-                flow=3,
+                name="gold etf",
+                flow=7,
                 flow_title="",
-                market_title="",
+                market_title="صندوق های کالایی",
                 last_date=20260811,
                 is_active=True,
             ),
         ]
         assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") == "222"
+
+    def test_retail_sole_exact_fallback(self) -> None:
+        from fund_calculator import _pick_from_hits
+        from tsetmc_client import SearchHit
+
+        hits = [
+            SearchHit(
+                ins_code="56987424987755487",
+                symbol="آتش",
+                name="صندوق",
+                flow=7,
+                flow_title="",
+                market_title="صندوق های کالایی",
+                last_date=20260811,
+                is_active=True,
+            ),
+        ]
+        assert (
+            _pick_from_hits(hits, fund_symbol="آتش", board="retail")
+            == "56987424987755487"
+        )
 
 
 class TestHistory:
