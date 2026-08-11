@@ -4,5 +4,5 @@ openpyxl>=3.1.0
 tenacity>=7.0.0,<8.0.0
 Jinja2>=3.1.0
 pytse-client>=0.19.0
-finpy-tse>=1.2.0
 python-dotenv>=1.0.0
+pytest>=8.0.0

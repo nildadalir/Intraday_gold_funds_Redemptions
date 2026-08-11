@@ -1,10 +1,9 @@
 """
-Preferred TSETMC access using pytse_client + finpy_tse utilities,
+Preferred TSETMC access using pytse_client utilities,
 without constructing pytse Ticker (Ticker.__init__ downloads full history).
 
-  - finpy_tse.get_tse_webid  → instrument search
   - pytse_client settings URL + short-timeout requests → last price / legal vol
-  - CDN httpx (parent) → ETF dual NAV + fallbacks + raw dumps
+  - CDN httpx (parent) → ETF dual NAV, search, history fallbacks + raw dumps
 """
 
 from __future__ import annotations

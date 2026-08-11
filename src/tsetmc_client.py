@@ -84,6 +84,7 @@ class HealthCheckResult:
     api_latency_ms: float | None
     api_error: str | None
     proxy_configured: bool
+    suggest_proxy: bool = False
 
     @property
     def ok(self) -> bool:
@@ -98,7 +99,7 @@ def symbol_slug(symbol: str) -> str:
 
 
 def create_client() -> TsetmcClient:
-    """Factory: mock, CDN-only, or preferred libs (pytse/finpy) + CDN."""
+    """Factory: mock, CDN-only, or preferred libs (pytse) + CDN."""
     if config.USE_MOCK_DATA:
         logger.warning("USE_MOCK_DATA=True — using mock TSETMC responses")
         return MockTsetmcClient()
@@ -108,7 +109,7 @@ def create_client() -> TsetmcClient:
     from tsetmc_libs import PreferredLibsClient
 
     logger.info(
-        "TSETMC provider=preferred (pytse_client + finpy_tse; CDN for ETF NAV)"
+        "TSETMC provider=preferred (pytse_client; CDN for ETF NAV)"
     )
     return PreferredLibsClient()
 
@@ -411,7 +412,7 @@ class TsetmcClient:
     def _client_type_from_cdn_history(
         self, ins_code: int | str
     ) -> ClientTypeVolumes:
-        """Most recent history row with buy_N_Volume > 0 (finpy-style endpoint)."""
+        """Most recent history row with buy_N_Volume > 0 (CDN history endpoint)."""
         label = self.raw_label or str(ins_code)
         payload = self._get_json(
             f"/api/ClientType/GetClientTypeHistory/{ins_code}",
@@ -627,6 +628,18 @@ class TsetmcClient:
             https_error = "Skipped (DNS failed)"
             api_error = "Skipped (DNS failed)"
 
+        blob = " ".join(
+            x for x in (https_error, api_error, dns_error) if x
+        ).lower()
+        suggest_proxy = (
+            not bool(self.proxy)
+            and not api_ok
+            and any(
+                token in blob
+                for token in ("timeout", "timed out", "connect", "ssl", "handshake")
+            )
+        )
+
         return HealthCheckResult(
             dns_ok=dns_ok,
             dns_ips=dns_ips,
@@ -638,6 +651,7 @@ class TsetmcClient:
             api_latency_ms=api_latency_ms,
             api_error=api_error,
             proxy_configured=bool(self.proxy),
+            suggest_proxy=suggest_proxy,
         )
 
     def _get_json(self, path: str, *, raw_name: str) -> dict[str, Any]:
@@ -796,6 +810,7 @@ class MockTsetmcClient(TsetmcClient):
             api_latency_ms=0.0,
             api_error=None,
             proxy_configured=False,
+            suggest_proxy=False,
         )
 
     def _require_atash(self, ins_code: int | str) -> None:
