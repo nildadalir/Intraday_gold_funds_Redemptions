@@ -220,7 +220,8 @@ def resolve_board_ins_code(
                 fund_symbol,
                 mapped,
             )
-            put_cached_ins_code(key, mapped)
+            if not hasattr(client, "_mock"):
+                put_cached_ins_code(key, mapped)
             return mapped
 
     cached = get_cached_ins_code(key)
@@ -247,7 +248,8 @@ def resolve_board_ins_code(
             fund_symbol,
             chosen,
         )
-        put_cached_ins_code(key, chosen)
+        if not hasattr(client, "_mock"):
+            put_cached_ins_code(key, chosen)
         return chosen
 
     if board == "main":
@@ -258,7 +260,8 @@ def resolve_board_ins_code(
                 fund_symbol,
                 mapped,
             )
-            put_cached_ins_code(key, mapped)
+            if not hasattr(client, "_mock"):
+                put_cached_ins_code(key, mapped)
             return mapped
         if cached:
             return cached
