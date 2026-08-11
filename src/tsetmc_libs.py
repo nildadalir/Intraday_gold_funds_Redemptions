@@ -242,6 +242,9 @@ class PreferredLibsClient(TsetmcClient):
             logger.warning("CDN search failed for %r (%s)", query, exc)
 
         need_legacy = bool(config.SEARCH_LEGACY_FALLBACK)
+        # Always merge legacy when enabled: CDN often returns a single hit with
+        # empty flow/market titles, which hides the retail (خرده فروشی) board.
+        if need_legacy:
             try:
                 for hit in self._search_legacy_aspx(query):
                     prev = hits_by_code.get(hit.ins_code)
