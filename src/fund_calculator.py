@@ -40,6 +40,8 @@ class ValuationResult:
     instrument_id: str = ""
     instrument_code: str = ""
     warnings: tuple[str, ...] = ()
+    legal_volume_as_of: int | None = None
+    legal_volume_source: str = ""
 
     @property
     def asset(self) -> str:
@@ -402,6 +404,8 @@ def value_fund(
         instrument_id=instrument_id,
         instrument_code=instrument_code,
         warnings=tuple(warnings),
+        legal_volume_as_of=client_type.as_of_date,
+        legal_volume_source=client_type.source,
     )
 
 

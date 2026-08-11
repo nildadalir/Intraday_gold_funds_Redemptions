@@ -57,13 +57,34 @@
             </td>
           </tr>
 
-          <!-- TIMESTAMP -->
+          <!-- TIMESTAMP + MARKET BANNER -->
           <tr>
             <td class="px" style="padding:30px 32px 6px 32px;">
               <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#005282;font-weight:bold;">Generated at</div>
               <div style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:bold;color:#0f1c24;margin-top:6px;">{{ generated_at }}</div>
               {% if subtitle %}
               <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#5b6b75;margin-top:8px;">{{ subtitle }}</div>
+              {% endif %}
+              {% if market_banner %}
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;background-color:#f4f7f9;border-radius:10px;">
+                <tr>
+                  <td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;">
+                    <div style="font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#5b6b75;font-weight:bold;">Market status</div>
+                    <div style="margin-top:6px;font-size:15px;font-weight:bold;color:{{ market_banner.status_color }};">
+                      {{ market_banner.status_label }}
+                      <span style="font-size:12px;font-weight:normal;color:#5b6b75;">&nbsp;&middot;&nbsp;{{ market_banner.session_window }}</span>
+                    </div>
+                    <div style="margin-top:8px;font-size:12px;color:#3a4750;line-height:1.45;">{{ market_banner.message }}</div>
+                    <div style="margin-top:8px;font-size:12px;color:#3a4750;">
+                      Legal volume as-of: <strong>{{ market_banner.legal_volume_as_of }}</strong>
+                      &nbsp;&middot;&nbsp; Source: {{ market_banner.legal_volume_source }}
+                      {% if previous_date %}
+                      &nbsp;&middot;&nbsp; DoD vs {{ previous_date }}
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              </table>
               {% endif %}
             </td>
           </tr>
@@ -87,7 +108,8 @@
                   <th align="left" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Instrument</th>
                   <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Price</th>
                   <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Legal Vol</th>
-                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Calculated Value (Rial)</th>
+                  <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Calculated Value (Rial)</th>
+                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">DoD %</th>
                 </tr>
                 {% if redemption_funds %}
                   {% for row in redemption_funds %}
@@ -98,12 +120,13 @@
                   <td style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.instrument }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.price_used_fmt }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.legal_volume_fmt }}</td>
-                  <td align="right" style="padding:10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.value_fmt }}</td>
+                  <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.value_fmt }}</td>
+                  <td align="right" style="padding:10px 0;border-top:1px solid #eaeef1;color:{{ row.delta_color }};font-weight:bold;">{{ row.delta_fmt }}</td>
                 </tr>
                   {% endfor %}
                 {% else %}
                 <tr>
-                  <td colspan="7" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No redemption funds</td>
+                  <td colspan="8" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No redemption funds</td>
                 </tr>
                 {% endif %}
               </table>
@@ -129,7 +152,8 @@
                   <th align="left" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Instrument</th>
                   <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Price</th>
                   <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Legal Vol</th>
-                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Calculated Value (Rial)</th>
+                  <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">Calculated Value (Rial)</th>
+                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;text-transform:uppercase;font-weight:bold;">DoD %</th>
                 </tr>
                 {% if issue_redemption_funds %}
                   {% for row in issue_redemption_funds %}
@@ -140,12 +164,13 @@
                   <td style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.instrument }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.price_used_fmt }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.legal_volume_fmt }}</td>
-                  <td align="right" style="padding:10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.value_fmt }}</td>
+                  <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.value_fmt }}</td>
+                  <td align="right" style="padding:10px 0;border-top:1px solid #eaeef1;color:{{ row.delta_color }};font-weight:bold;">{{ row.delta_fmt }}</td>
                 </tr>
                   {% endfor %}
                 {% else %}
                 <tr>
-                  <td colspan="7" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No issue/redemption funds</td>
+                  <td colspan="8" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No issue/redemption funds</td>
                 </tr>
                 {% endif %}
               </table>

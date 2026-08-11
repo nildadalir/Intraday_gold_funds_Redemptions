@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import Counter
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,12 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import config
 from fund_calculator import ValuationResult, calculate_fund_value, classify_category
+from history_store import (
+    load_previous_values,
+    save_daily_values,
+    value_change_pct,
+)
+from market_hours import gold_market_is_open, gold_market_status_message
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +44,20 @@ def format_poc_output(result: ValuationResult) -> str:
         f"Market TseId: {result.market_tse_id}",
         f"Legal Buy Volume: {_fmt_num(result.legal_buy_volume)}",
         f"Legal Sell Volume: {_fmt_num(result.legal_sell_volume)}",
-        "",
-        "=== Calculation ===",
-        f"Selected Price: {_fmt_num(result.selected_price)}",
-        f"Category: {result.category}",
-        f"Calculated Value: {_fmt_num(result.calculated_value)}",
     ]
+    if result.legal_volume_source:
+        lines.append(f"Legal Volume Source: {result.legal_volume_source}")
+    if result.legal_volume_as_of:
+        lines.append(f"Legal Volume As-Of: {result.legal_volume_as_of}")
+    lines.extend(
+        [
+            "",
+            "=== Calculation ===",
+            f"Selected Price: {_fmt_num(result.selected_price)}",
+            f"Category: {result.category}",
+            f"Calculated Value: {_fmt_num(result.calculated_value)}",
+        ]
+    )
     if result.warnings:
         lines.append("")
         lines.append("Warnings:")
@@ -69,6 +84,8 @@ def build_debug_payload(result: ValuationResult) -> dict[str, Any]:
             "Market TseId": result.market_tse_id,
             "Legal Buy Volume": _json_num(result.legal_buy_volume),
             "Legal Sell Volume": _json_num(result.legal_sell_volume),
+            "Legal Volume Source": result.legal_volume_source or None,
+            "Legal Volume As-Of": result.legal_volume_as_of,
         },
         "calculation": {
             "Selected Price": _json_num(result.selected_price),
@@ -115,6 +132,31 @@ def split_and_sort(
     return redemption, issue
 
 
+def build_market_banner(results: list[ValuationResult]) -> dict[str, Any]:
+    open_now = gold_market_is_open()
+    as_of_dates = [r.legal_volume_as_of for r in results if r.legal_volume_as_of]
+    as_of_label = "live / session"
+    if as_of_dates:
+        common = Counter(as_of_dates).most_common(1)[0][0]
+        as_of_label = str(common)
+        if len(set(as_of_dates)) > 1:
+            as_of_label = f"{common} (mixed)"
+    sources = {r.legal_volume_source for r in results if r.legal_volume_source}
+    source_label = ", ".join(sorted(sources)) if sources else "n/a"
+    return {
+        "is_open": open_now,
+        "status_label": "OPEN" if open_now else "CLOSED",
+        "status_color": "#1f7a4d" if open_now else "#b02a1c",
+        "message": gold_market_status_message(),
+        "legal_volume_as_of": as_of_label,
+        "legal_volume_source": source_label,
+        "session_window": (
+            f"{config.MARKET_OPEN_TIME}–{config.MARKET_CLOSE_TIME} "
+            f"{config.MARKET_TIMEZONE}"
+        ),
+    }
+
+
 def render_html_report(
     results: list[ValuationResult],
     *,
@@ -122,8 +164,15 @@ def render_html_report(
     subtitle: str | None = None,
     generated_at: datetime | None = None,
     errors: list[dict[str, str]] | None = None,
+    previous_values: dict[str, float] | None = None,
+    previous_date: date | None = None,
+    persist_history: bool = True,
+    market_banner: dict[str, Any] | None = None,
 ) -> Path:
     now = generated_at or datetime.now()
+    if previous_values is None:
+        previous_date, previous_values = load_previous_values(now.date())
+    banner = market_banner or build_market_banner(results)
     redemption, issue = split_and_sort(results)
     env = Environment(
         loader=FileSystemLoader(str(config.REPORT_DIR)),
@@ -134,13 +183,21 @@ def render_html_report(
         generated_at=now.strftime("%Y-%m-%d %H:%M:%S"),
         report_date=f"{now.strftime('%b')} {now.day}, {now.year}",
         subtitle=subtitle,
-        redemption_funds=[_row_view(r) for r in redemption],
-        issue_redemption_funds=[_row_view(r) for r in issue],
+        market_banner=banner,
+        previous_date=previous_date.isoformat() if previous_date else None,
+        redemption_funds=[
+            _row_view(r, previous_values.get(r.symbol)) for r in redemption
+        ],
+        issue_redemption_funds=[
+            _row_view(r, previous_values.get(r.symbol)) for r in issue
+        ],
         errors=errors or [],
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(html, encoding="utf-8")
     logger.info("Wrote HTML report: %s", output_path)
+    if persist_history and results:
+        save_daily_values(results, day=now.date(), generated_at=now)
     return output_path
 
 
@@ -173,6 +230,8 @@ def build_mock_report_results() -> list[ValuationResult]:
         asset_id="30018",
         instrument_id="69664",
         instrument_code="IRTKATSH0001",
+        legal_volume_as_of=20260810,
+        legal_volume_source="mock",
     )
 
     # Synthetic second row for Issue/Redemption table layout only
@@ -197,6 +256,8 @@ def build_mock_report_results() -> list[ValuationResult]:
         asset_id="2869",
         instrument_id="10263",
         instrument_code="IRTKZARF0001",
+        legal_volume_as_of=20260810,
+        legal_volume_source="mock",
     )
     return [atash, issue_row]
 
@@ -213,15 +274,33 @@ def generate_mock_html_report(
             "reason": "NULL TseId in BI export",
         }
     ]
+    # Fake prior day so Δ% column is visible in mock layout.
+    prev = {
+        results[0].symbol: results[0].calculated_value * 0.97,
+        results[1].symbol: results[1].calculated_value * 1.02,
+    }
     return render_html_report(
         results,
         output_path=path,
         subtitle="Mock data — layout review only (not live market values)",
         errors=sample_errors,
+        previous_values=prev,
+        previous_date=date(2026, 8, 10),
+        persist_history=False,
     )
 
 
-def _row_view(result: ValuationResult) -> dict[str, Any]:
+def _row_view(
+    result: ValuationResult, previous_value: float | None = None
+) -> dict[str, Any]:
+    pct = value_change_pct(result.calculated_value, previous_value)
+    if pct is None:
+        delta_fmt = "—"
+        delta_color = "#8a97a0"
+    else:
+        sign = "+" if pct >= 0 else ""
+        delta_fmt = f"{sign}{pct:.2f}%"
+        delta_color = "#1f7a4d" if pct >= 0 else "#b02a1c"
     return {
         "asset_id": result.asset_id,
         "asset": result.asset,
@@ -230,6 +309,8 @@ def _row_view(result: ValuationResult) -> dict[str, Any]:
         "price_used_fmt": _fmt_num(result.selected_price),
         "legal_volume_fmt": _fmt_num(result.legal_buy_volume),
         "value_fmt": _fmt_num(result.calculated_value),
+        "delta_fmt": delta_fmt,
+        "delta_color": delta_color,
     }
 
 

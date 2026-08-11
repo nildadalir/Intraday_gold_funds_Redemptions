@@ -9,8 +9,10 @@ output/
 logs/
 data/raw/*.json
 data/debug/*.json
+data/history/values_*.json
 !data/raw/.gitkeep
 !data/debug/.gitkeep
+!data/history/.gitkeep
 !data/inscode_cache.json
 *.log
 _excel_inspect.json
