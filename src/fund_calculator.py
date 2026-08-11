@@ -106,7 +106,7 @@ def _normalize_symbol(value: str) -> str:
 
 
 def _board_label(hit: SearchHit) -> str:
-    return f"{hit.flow_title} {hit.market_title}"
+    return f"{hit.flow_title} {hit.market_title} {hit.name}"
 
 
 def _is_main_board(hit: SearchHit) -> bool:
@@ -115,8 +115,64 @@ def _is_main_board(hit: SearchHit) -> bool:
 
 
 def _is_retail_board(hit: SearchHit) -> bool:
+    """TSETMC retail share board (خرده فروشی)."""
     label = _board_label(hit)
-    return "خرده" in label
+    if "خرده" in label:
+        return True
+    # Commodity / gold ETF retail flow is commonly flow=3 on TSETMC.
+    if hit.flow == 3 and "بازارگردان" not in label and "گردانی" not in label:
+        return True
+    return False
+
+
+def _enrich_hits_with_instrument_info(
+    client: TsetmcClient, hits: list[SearchHit]
+) -> list[SearchHit]:
+    """Fill empty flow/market titles via GetInstrumentInfo (CDN search often omits them)."""
+    enriched: list[SearchHit] = []
+    for hit in hits:
+        if hit.flow_title or hit.market_title or hit.flow is not None:
+            # Still enrich when titles are empty even if flow is set.
+            if hit.flow_title or hit.market_title:
+                enriched.append(hit)
+                continue
+        try:
+            info = client.get_instrument_info(hit.ins_code)
+        except Exception as exc:
+            logger.debug(
+                "GetInstrumentInfo failed for %s: %s", hit.ins_code, exc
+            )
+            enriched.append(hit)
+            continue
+        flow_raw = info.get("flow")
+        try:
+            flow = int(flow_raw) if flow_raw is not None else hit.flow
+        except (TypeError, ValueError):
+            flow = hit.flow
+        flow_title = str(
+            info.get("flowTitle") or info.get("FlowTitle") or hit.flow_title or ""
+        ).strip()
+        market_title = str(
+            info.get("cgrValCotTitle")
+            or info.get("CGrValCotTitle")
+            or info.get("cgrValCot")
+            or hit.market_title
+            or ""
+        ).strip()
+        name = str(info.get("lVal30") or hit.name or "").strip() or hit.name
+        enriched.append(
+            SearchHit(
+                ins_code=hit.ins_code,
+                symbol=hit.symbol,
+                name=name,
+                flow=flow,
+                flow_title=flow_title,
+                market_title=market_title,
+                last_date=hit.last_date,
+                is_active=hit.is_active,
+            )
+        )
+    return enriched
 
 
 def _cache_key(symbol: str, board: BoardKind) -> str:
@@ -299,6 +355,17 @@ def resolve_main_and_retail_ins_codes(
 ) -> tuple[str, str]:
     """One search → main (price/NAV) + retail (legal volume) insCodes."""
     hits = client.search_instruments(fund_symbol)
+    hits = _enrich_hits_with_instrument_info(client, hits)
+    fund_norm = _normalize_symbol(fund_symbol)
+    exact = [h for h in hits if _normalize_symbol(h.symbol) == fund_norm]
+    logger.info(
+        "Board candidates for %s: %s",
+        fund_symbol,
+        [
+            f"{h.ins_code}|flow={h.flow}|{h.flow_title}|{h.market_title}"
+            for h in exact
+        ],
+    )
     main_code = resolve_board_ins_code(
         client,
         fund_symbol,

@@ -106,7 +106,7 @@ class TestBoardPick:
         assert _pick_from_hits(hits, fund_symbol="آتش", board="main") == "111"
         assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") == "222"
 
-    def test_retail_missing(self) -> None:
+    def test_retail_by_flow(self) -> None:
         from fund_calculator import _pick_from_hits
         from tsetmc_client import SearchHit
 
@@ -121,8 +121,18 @@ class TestBoardPick:
                 last_date=20260811,
                 is_active=True,
             ),
+            SearchHit(
+                ins_code="222",
+                symbol="آتش",
+                name="retail",
+                flow=3,
+                flow_title="",
+                market_title="",
+                last_date=20260811,
+                is_active=True,
+            ),
         ]
-        assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") is None
+        assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") == "222"
 
 
 class TestHistory:

@@ -232,7 +232,6 @@ class PreferredLibsClient(TsetmcClient):
             return list(cached)
 
         hits_by_code: dict[str, SearchHit] = {}
-        query_norm = "".join(cache_key.split("\u200c")).strip()
 
         cdn_ok = False
         try:
@@ -242,23 +241,15 @@ class PreferredLibsClient(TsetmcClient):
         except Exception as exc:
             logger.warning("CDN search failed for %r (%s)", query, exc)
 
-        def _has_exact() -> bool:
-            for hit in hits_by_code.values():
-                if "".join(hit.symbol.split("\u200c")).strip() == query_norm:
-                    return True
-            return False
-
-        need_legacy = (
-            config.SEARCH_LEGACY_FALLBACK
-            and (not cdn_ok or not _has_exact())
-        )
-        if need_legacy:
+        need_legacy = bool(config.SEARCH_LEGACY_FALLBACK)
             try:
                 for hit in self._search_legacy_aspx(query):
                     prev = hits_by_code.get(hit.ins_code)
                     if prev is None:
                         hits_by_code[hit.ins_code] = hit
-                    elif not prev.market_title and hit.market_title:
+                    elif (not prev.market_title and hit.market_title) or (
+                        not prev.flow_title and hit.flow_title
+                    ):
                         hits_by_code[hit.ins_code] = hit
             except Exception as exc:
                 logger.warning(
@@ -315,6 +306,11 @@ class PreferredLibsClient(TsetmcClient):
                 last_date_i = int(last_date) if last_date is not None else None
             except (TypeError, ValueError):
                 last_date_i = None
+            flow_raw = row.get("flow")
+            try:
+                flow = int(flow_raw) if flow_raw is not None else None
+            except (TypeError, ValueError):
+                flow = None
             hits.append(
                 SearchHit(
                     ins_code=ins_code,
@@ -325,7 +321,7 @@ class PreferredLibsClient(TsetmcClient):
                             for i in str(row.get("lVal30") or "").split("\u200c")
                         ).strip()
                     ),
-                    flow=None,
+                    flow=flow,
                     flow_title=str(row.get("flowTitle") or "").strip(),
                     market_title=str(
                         row.get("cgrValCotTitle") or row.get("cgrValCot") or ""
