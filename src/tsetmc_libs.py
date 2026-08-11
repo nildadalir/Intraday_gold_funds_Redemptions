@@ -25,10 +25,8 @@ from tsetmc_client import (
 
 logger = logging.getLogger(__name__)
 
-_LIB_TIMEOUT = 8.0
 
-
-def _session() -> requests.Session:
+def _make_session() -> requests.Session:
     s = requests.Session()
     s.headers.update(config.TSETMC_HEADERS)
     # Prefer explicit TSETMC_PROXY; do not inherit Cursor VPN env proxies.
@@ -42,13 +40,23 @@ def _session() -> requests.Session:
 
 
 class PreferredLibsClient(TsetmcClient):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._lib_timeout = float(config.TSETMC_LIB_TIMEOUT_SECONDS)
+        self._req = _make_session()
+
+    def close(self) -> None:
+        try:
+            self._req.close()
+        finally:
+            super().close()
+
     def get_last_trade_price(self, ins_code: int | str) -> float:
         try:
             from pytse_client import tse_settings
 
             url = tse_settings.TSE_ISNT_INFO_URL.format(ins_code)
-            with _session() as session:
-                response = session.get(url, timeout=_LIB_TIMEOUT)
+            response = self._req.get(url, timeout=self._lib_timeout)
             response.raise_for_status()
             price_section = response.text.split(";")[0].split(",")
             last_price = int(price_section[2])
@@ -85,8 +93,7 @@ class PreferredLibsClient(TsetmcClient):
                 )
 
                 url = tse_settings.TSE_ISNT_INFO_URL.format(ins_code)
-                with _session() as session:
-                    response = session.get(url, timeout=_LIB_TIMEOUT)
+                response = self._req.get(url, timeout=self._lib_timeout)
                 response.raise_for_status()
                 sections = response.text.split(";")
                 if len(sections) < 5:
@@ -131,8 +138,7 @@ class PreferredLibsClient(TsetmcClient):
             from pytse_client import tse_settings
 
             url = tse_settings.TSE_CLIENT_TYPE_DATA_URL.format(ins_code)
-            with _session() as session:
-                response = session.get(url, timeout=_LIB_TIMEOUT)
+            response = self._req.get(url, timeout=self._lib_timeout)
             response.raise_for_status()
             rows = [
                 row.split(",")
@@ -186,51 +192,74 @@ class PreferredLibsClient(TsetmcClient):
 
     def search_instruments(self, query: str) -> list[SearchHit]:
         """
-        Merge CDN GetInstrumentSearch with pytse legacy search.aspx.
+        CDN search first; legacy search.aspx only when needed.
 
-        CDN often omits IME market-maker boards (e.g. آتش2); old.tsetmc.com
-        search.aspx still returns them.
+        Valuation uses main/retail boards; CDN usually has those. Legacy is
+        reserved for missing exact symbol hits (or when CDN fails).
         """
-        hits_by_code: dict[str, SearchHit] = {}
+        cache_key = query.strip()
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return list(cached)
 
+        hits_by_code: dict[str, SearchHit] = {}
+        query_norm = "".join(cache_key.split("\u200c")).strip()
+
+        cdn_ok = False
         try:
             for hit in self._search_cdn(query):
                 hits_by_code[hit.ins_code] = hit
+            cdn_ok = True
         except Exception as exc:
             logger.warning("CDN search failed for %r (%s)", query, exc)
 
-        try:
-            for hit in self._search_legacy_aspx(query):
-                prev = hits_by_code.get(hit.ins_code)
-                if prev is None:
-                    hits_by_code[hit.ins_code] = hit
-                else:
-                    # Prefer richer market/flow titles when CDN left them empty
-                    if not prev.market_title and hit.market_title:
+        def _has_exact() -> bool:
+            for hit in hits_by_code.values():
+                if "".join(hit.symbol.split("\u200c")).strip() == query_norm:
+                    return True
+            return False
+
+        need_legacy = (
+            config.SEARCH_LEGACY_FALLBACK
+            and (not cdn_ok or not _has_exact())
+        )
+        if need_legacy:
+            try:
+                for hit in self._search_legacy_aspx(query):
+                    prev = hits_by_code.get(hit.ins_code)
+                    if prev is None:
                         hits_by_code[hit.ins_code] = hit
-        except Exception as exc:
-            logger.warning("legacy search.aspx failed for %r (%s)", query, exc)
+                    elif not prev.market_title and hit.market_title:
+                        hits_by_code[hit.ins_code] = hit
+            except Exception as exc:
+                logger.warning(
+                    "legacy search.aspx failed for %r (%s)", query, exc
+                )
 
         hits = list(hits_by_code.values())
         if hits:
             logger.info(
-                "search merged CDN+legacy for %r -> %s hits", query, len(hits)
+                "search for %r -> %s hits (cdn_ok=%s legacy=%s)",
+                query,
+                len(hits),
+                cdn_ok,
+                need_legacy,
             )
-            return hits
+            self._search_cache[cache_key] = hits
+            return list(hits)
 
-        logger.warning(
-            "lib search empty for %r; httpx CDN fallback", query
-        )
-        return super().search_instruments(query)
+        logger.warning("lib search empty for %r; httpx CDN fallback", query)
+        hits = super().search_instruments(query)
+        self._search_cache[cache_key] = hits
+        return list(hits)
 
     def _search_cdn(self, query: str) -> list[SearchHit]:
         from persiantools import characters
 
-        with _session() as session:
-            page = session.get(
-                f"https://cdn.tsetmc.com/api/Instrument/GetInstrumentSearch/{query}",
-                timeout=_LIB_TIMEOUT,
-            )
+        page = self._req.get(
+            f"https://cdn.tsetmc.com/api/Instrument/GetInstrumentSearch/{query}",
+            timeout=self._lib_timeout,
+        )
         page.raise_for_status()
         rows = page.json().get("instrumentSearch") or []
         hits: list[SearchHit] = []
@@ -270,13 +299,12 @@ class PreferredLibsClient(TsetmcClient):
         return hits
 
     def _search_legacy_aspx(self, query: str) -> list[SearchHit]:
-        """pytse TSE_SYMBOL_ID_URL — finds بازارگردان boards CDN omits."""
+        """pytse TSE_SYMBOL_ID_URL — finds boards CDN may omit."""
         from persiantools import characters
         from pytse_client import tse_settings
 
         url = tse_settings.TSE_SYMBOL_ID_URL.format(query.strip())
-        with _session() as session:
-            response = session.get(url, timeout=_LIB_TIMEOUT)
+        response = self._req.get(url, timeout=self._lib_timeout)
         response.raise_for_status()
         hits: list[SearchHit] = []
         for chunk in (response.text or "").split(";"):
@@ -294,7 +322,6 @@ class PreferredLibsClient(TsetmcClient):
             ins_code = str(parts[2]).strip()
             if not symbol or not ins_code or not ins_code.isdigit():
                 continue
-            # Field 7 is active flag when present (pytse convention)
             active = True
             if len(parts) > 7:
                 active = str(parts[7]).strip() in {"1", "true", "True"}

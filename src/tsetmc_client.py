@@ -150,6 +150,7 @@ class TsetmcClient:
                 "Iranian hosts are blocked (e.g. Cursor VPN)."
             )
         self._client = httpx.Client(**client_kwargs)
+        self._search_cache: dict[str, list[SearchHit]] = {}
 
     def close(self) -> None:
         self._client.close()
@@ -165,14 +166,24 @@ class TsetmcClient:
         Last trade / last close for an instrument.
 
         Gold ETFs often return HTTP 500 on GetClosingPriceInfo; cascade through
-        daily history and the legacy instinfofast board.
+        daily history and the legacy instinfofast board. When the gold session
+        is closed, skip ClosingPriceInfo first (usually empty/500).
         """
+        from market_hours import gold_market_is_open
+
         errors: list[str] = []
-        sources = (
-            ("ClosingPriceInfo", self._last_price_from_closing_info),
-            ("ClosingPriceDailyList", self._last_price_from_daily_list),
-            ("instinfofast", self._last_price_from_instinfofast),
-        )
+        if gold_market_is_open():
+            sources = (
+                ("ClosingPriceInfo", self._last_price_from_closing_info),
+                ("ClosingPriceDailyList", self._last_price_from_daily_list),
+                ("instinfofast", self._last_price_from_instinfofast),
+            )
+        else:
+            sources = (
+                ("ClosingPriceDailyList", self._last_price_from_daily_list),
+                ("instinfofast", self._last_price_from_instinfofast),
+                ("ClosingPriceInfo", self._last_price_from_closing_info),
+            )
         for name, fetch in sources:
             try:
                 value = fetch(ins_code)
@@ -481,6 +492,11 @@ class TsetmcClient:
         )
 
     def search_instruments(self, query: str) -> list[SearchHit]:
+        cache_key = query.strip()
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            return list(cached)
+
         encoded = quote(query, safe="")
         payload = self._get_json(
             f"/api/Instrument/GetInstrumentSearch/{encoded}",
@@ -488,6 +504,7 @@ class TsetmcClient:
         )
         rows = payload.get("instrumentSearch")
         if rows is None:
+            self._search_cache[cache_key] = []
             return []
         if not isinstance(rows, list):
             raise TsetmcDataError(
@@ -523,7 +540,8 @@ class TsetmcClient:
                     is_active=bool(last_date_i and last_date_i != 0),
                 )
             )
-        return hits
+        self._search_cache[cache_key] = hits
+        return list(hits)
 
     def get_instrument_info(self, ins_code: int | str) -> dict[str, Any]:
         payload = self._get_json(

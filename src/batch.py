@@ -2,9 +2,9 @@
 Batch valuation pipeline.
 
   BI Excel
-    -> validate rows
+    -> validate rows (main board only)
     -> skip NULL TseId with logging (error record)
-    -> process each fund (continue on failure)
+    -> process each fund (continue on failure; optional parallelism)
     -> categorize / calculate
     -> sort descending
     -> render HTML (including Error Summary)
@@ -13,6 +13,7 @@ Batch valuation pipeline.
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -60,6 +61,36 @@ class BatchSummary:
         return len(self.errors)
 
 
+def _error_for(record: FundRecord, reason: str) -> ErrorRecord:
+    return ErrorRecord(
+        fund_name=record.instrument,
+        tse_id="NULL" if record.tse_id is None else str(record.tse_id),
+        reason=reason,
+    )
+
+
+def _value_one(
+    record: FundRecord, client: TsetmcClient | None = None
+) -> ValuationResult:
+    owns = client is None
+    active = client or create_client()
+    try:
+        active.raw_label = symbol_slug(record.instrument)
+        result = value_fund_record(active, record)
+        if (
+            not config.USE_MOCK_DATA
+            and result.market_tse_id in config.FORBIDDEN_MOCK_MARKET_TSE_IDS
+        ):
+            raise ValueError(
+                f"Mock market TseId forbidden in live mode: "
+                f"{result.market_tse_id}"
+            )
+        return result
+    finally:
+        if owns:
+            active.close()
+
+
 def run_batch_pipeline(
     *,
     excel_path: Path | None = None,
@@ -80,19 +111,15 @@ def run_batch_pipeline(
             row.asset_id,
             row.instrument_code,
         )
-        summary.errors.append(
-            ErrorRecord(
-                fund_name=row.instrument,
-                tse_id="NULL",
-                reason=reason,
-            )
-        )
+        summary.errors.append(_error_for(row, reason))
 
+    workers = config.BATCH_MAX_WORKERS
     logger.info(
-        "Batch plan: processable=%s skipped_null_tseid=%s execute=%s",
+        "Batch plan: processable=%s skipped_null_tseid=%s execute=%s workers=%s",
         len(processable),
         len(skipped),
         execute,
+        workers,
     )
     from market_hours import gold_market_status_message
 
@@ -102,46 +129,48 @@ def run_batch_pipeline(
         logger.info("Batch execute=False — validation/skip plan only")
         return summary
 
-    owns_client = client is None
-    active = client or create_client()
+    # Shared client only for sequential runs (thread-safe HTTP is per-worker).
+    owns_client = client is None and workers <= 1
+    active = client
+    if owns_client:
+        active = create_client()
+
     try:
-        for record in processable:
-            try:
-                active.raw_label = symbol_slug(record.instrument)
-                result = value_fund_record(active, record)
-                # Extra live-mode guard (also enforced inside value_fund)
-                if (
-                    not config.USE_MOCK_DATA
-                    and result.market_tse_id
-                    in config.FORBIDDEN_MOCK_MARKET_TSE_IDS
-                ):
-                    raise ValueError(
-                        f"Mock market TseId forbidden in live mode: "
-                        f"{result.market_tse_id}"
+        if workers <= 1:
+            for record in processable:
+                try:
+                    summary.processed.append(_value_one(record, active))
+                except Exception as exc:
+                    reason = str(exc)
+                    logger.error(
+                        "Failed %s (TseId=%s): %s",
+                        record.instrument,
+                        record.tse_id,
+                        reason,
                     )
-                summary.processed.append(result)
-            except Exception as exc:
-                # Never abort the batch for a single fund failure.
-                reason = str(exc)
-                logger.error(
-                    "Failed %s (TseId=%s): %s",
-                    record.instrument,
-                    record.tse_id,
-                    reason,
-                )
-                summary.errors.append(
-                    ErrorRecord(
-                        fund_name=record.instrument,
-                        tse_id=(
-                            "NULL"
-                            if record.tse_id is None
-                            else str(record.tse_id)
-                        ),
-                        reason=reason,
-                    )
-                )
+                    summary.errors.append(_error_for(record, reason))
+        else:
+            logger.info("Batch parallel workers=%s", workers)
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(_value_one, record, None): record
+                    for record in processable
+                }
+                for fut in as_completed(futures):
+                    record = futures[fut]
+                    try:
+                        summary.processed.append(fut.result())
+                    except Exception as exc:
+                        reason = str(exc)
+                        logger.error(
+                            "Failed %s (TseId=%s): %s",
+                            record.instrument,
+                            record.tse_id,
+                            reason,
+                        )
+                        summary.errors.append(_error_for(record, reason))
     finally:
-        if owns_client:
+        if owns_client and active is not None:
             active.close()
 
     now = datetime.now()

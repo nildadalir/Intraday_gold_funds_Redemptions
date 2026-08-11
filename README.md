@@ -81,14 +81,16 @@ Important keys:
 
 ## Valuation rules
 
-All fields come from the **retail board** of the instrument (بازار = **خرده فروشی**), e.g. `آتش` — **not** from `{symbol}2` / بازارگردان.
+All fields come from the **main / retail board** of the instrument
+(`Market` = **بازار معاملات اصلی** / خرده فروشی), e.g. `آتش` — **not** from
+`{symbol}2` / `{symbol}3` / `{symbol}4` boards (آد-لات / جبرانی / بلوکی).
 
 | Field | Source |
 |--------|--------|
-| Last trade price | Retail board last price |
+| Last trade price | Main/retail board last price |
 | NAV redemption | ETF `pRedTran` |
 | NAV issue/redemption | ETF `pSubTran` |
-| Legal volume | Retail حقیقی/حقوقی → **`buy_N_Volume`** |
+| Legal volume | Main/retail حقیقی/حقوقی → **`buy_N_Volume`** |
 
 Business logic:
 
@@ -97,8 +99,8 @@ Business logic:
    - If `last_price <= nav_redemption` → **Redemption** → selected price = redemption NAV
    - Else → **Issue/Redemption** → selected price = **issue/redemption NAV** (`pSubTran`)
 3. **Fund value** = `legal_buy_volume × selected_price`
-4. **insCode**: Excel `TseId` is often float64-corrupted. Resolve retail `insCode` via TSETMC search (prefer خرده فروشی); Excel is only a near-match hint.
-5. **Batch**: never abort on one fund failure; always write HTML with Error Summary. Skip NULL `TseId` rows and list them as errors.
+4. **insCode**: Excel `TseId` is often float64-corrupted. Resolve via pytse map (when near Excel) or TSETMC search (prefer خرده/اصلی); Excel is a near-match hint.
+5. **Batch**: process **primary** BI rows only; never abort on one fund failure; always write HTML with Error Summary. Skip NULL `TseId` rows and list them as errors.
 6. **Live mode**: forbid mock TseIds (`999…`, `888…`).
 7. **HTML**: column `Calculated Value (Rial)`; internal valuation footer. Tables: Redemption (ابطال‌ها) and Issue/Redemption (صدور/ابطال‌ها), sorted by value descending.
 
@@ -106,15 +108,22 @@ Business logic:
 
 Gold funds trade **Saturday–Wednesday, 11:45–18:00 Tehran time**. Outside that window, live TSETMC boards often show zeros/blank fields. The pipeline logs session status and prefers **ClientType / price history** for the last session with data.
 
+### Performance knobs
+
+- `batch.max_workers` — parallel fund valuation (default `4`; set `1` for sequential)
+- `api.save_raw_responses` — off by default (enable only when debugging)
+- `api.search_legacy_fallback` — legacy `search.aspx` only when CDN misses the exact symbol
+- Offline pytse symbol map used first when it is within Excel float tolerance
+
 ## Data access
 
-- Prefer `pytse_client` / `finpy_tse`-style calls (`instinfofast`, `clienttype.aspx`, legacy `search.aspx`) with CDN httpx fallback
+- Prefer `pytse_client` / `finpy_tse`-style calls (`instinfofast`, `clienttype.aspx`, CDN search) with CDN httpx fallback
 - ETF dual NAV via CDN `GetETFByInsCode` when libs do not expose it cleanly
 - Do not invent prices, NAVs, or volumes when live/history data is missing — fail that fund and continue the batch
 
 ## Adding funds
 
-Add rows to `data/طلا.xlsx` (must include `InstrumentId`, `Instrument`, `AssetId`, `InstrumentCode`, `TseId`). No code change required. Rows with NULL `TseId` are skipped and listed as errors.
+Add **main-board** rows to `data/طلا.xlsx` (must include `InstrumentId`, `Instrument`, `AssetId`, `InstrumentCode`, `TseId`). Board variants ending in `2`/`3`/`4` are ignored automatically. Rows with NULL `TseId` are skipped and listed as errors.
 
 ## License / use
 

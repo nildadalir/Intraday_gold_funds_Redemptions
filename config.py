@@ -68,17 +68,20 @@ REPORT_TEMPLATE_NAME = Path(
 
 _BATCH = _CFG.get("batch") or {}
 BATCH_ENABLED = bool(_BATCH.get("enabled", True))
+BATCH_MAX_WORKERS = max(1, int(_BATCH.get("max_workers", 4)))
 
 _API = _CFG.get("api") or {}
 TSETMC_PROVIDER = str(_API.get("provider", "preferred"))
 TSETMC_BASE_URL = str(_API.get("base_url", "https://cdn.tsetmc.com"))
 TSETMC_TIMEOUT_SECONDS = float(_API.get("timeout_seconds", 15))
 TSETMC_CONNECT_TIMEOUT_SECONDS = float(_API.get("connect_timeout_seconds", 8))
+TSETMC_LIB_TIMEOUT_SECONDS = float(_API.get("lib_timeout_seconds", 8))
+SEARCH_LEGACY_FALLBACK = bool(_API.get("search_legacy_fallback", True))
 _RETRY = _API.get("retry") or {}
 TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))
 TSETMC_RETRY_WAIT_SECONDS = float(_RETRY.get("backoff_seconds", 1))
 TSETMC_PROXY: str | None = _API.get("proxy")
-SAVE_RAW_RESPONSES = bool(_API.get("save_raw_responses", True))
+SAVE_RAW_RESPONSES = bool(_API.get("save_raw_responses", False))
 TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
 
 _FEATURES = _CFG.get("features") or {}

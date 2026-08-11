@@ -12,6 +12,8 @@ paths:
 
 batch:
   enabled: true
+  # Parallel fund workers (each owns its own HTTP client). 1 = sequential.
+  max_workers: 4
 
 api:
   # preferred = pytse_client + finpy_tse (CDN for ETF NAV / fallback)
@@ -23,10 +25,14 @@ api:
   proxy: ${TSETMC_PROXY}
   timeout_seconds: 15
   connect_timeout_seconds: 8
+  lib_timeout_seconds: 8
+  # Call legacy search.aspx only when CDN has no exact symbol hit.
+  search_legacy_fallback: true
   retry:
     max_attempts: 2
     backoff_seconds: 1
-  save_raw_responses: true
+  # Raw JSON dumps are slow on batch runs; enable only when debugging.
+  save_raw_responses: false
   headers:
     User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     Accept: "application/json, text/plain, */*"

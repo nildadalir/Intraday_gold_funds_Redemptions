@@ -122,18 +122,34 @@ def resolve_fund_ins_code(
     excel_tse_id: int | str | None = None,
 ) -> str:
     """
-    Resolve the retail fund share insCode via TSETMC search.
+    Resolve the retail/main fund share insCode via TSETMC search.
 
     BI Excel TseId is often float-corrupted (16–17 digit IDs). Prefer an
-    exact search hit for the fund symbol (خرده فروشی when available);
+    exact search hit for the fund symbol (خرده فروشی / اصلی when available);
     use Excel only as a near-match hint. Falls back to pytse_client's static
-    symbol map when search has no hit.
+    symbol map when search has no hit. Tries the offline map first when it
+    is within Excel float tolerance (avoids a network search).
     """
+    mapped = _ins_code_from_pytse_map(fund_symbol)
+    if mapped and excel_tse_id is not None:
+        try:
+            excel_i = int(str(excel_tse_id).strip())
+            mapped_i = int(mapped)
+            if abs(mapped_i - excel_i) <= _EXCEL_FLOAT_TSEID_TOLERANCE:
+                logger.info(
+                    "Resolved fund insCode for %s via pytse map "
+                    "(Excel near-match): %s",
+                    fund_symbol,
+                    mapped,
+                )
+                return mapped
+        except ValueError:
+            pass
+
     hits = client.search_instruments(fund_symbol)
     fund_norm = _normalize_symbol(fund_symbol)
     exact = [h for h in hits if _normalize_symbol(h.symbol) == fund_norm]
     if not exact:
-        mapped = _ins_code_from_pytse_map(fund_symbol)
         if mapped:
             logger.warning(
                 "No search hit for %s; using pytse map insCode %s",
@@ -146,14 +162,15 @@ def resolve_fund_ins_code(
         )
     pool = [h for h in exact if h.is_active] or exact
 
-    # Prefer retail (خرده فروشی) share for last price / NAV / legal volume
-    retail = [
+    # Prefer retail / main board for last price / NAV / legal volume
+    preferred = [
         h
         for h in pool
-        if "خرده" in f"{h.flow_title} {h.market_title}"
+        if ("خرده" in f"{h.flow_title} {h.market_title}")
+        or ("اصلی" in f"{h.flow_title} {h.market_title}")
     ]
-    if retail:
-        pool = retail
+    if preferred:
+        pool = preferred
 
     if excel_tse_id is None:
         chosen = pool[0]
