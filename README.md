@@ -2,7 +2,7 @@
 
 Daily valuation pipeline for Iranian gold ETFs (Turquoise Asset Management).
 
-Reads funds from a BI Excel export, pulls market data from TSETMC (via `pytse_client` / `finpy_tse` with CDN fallback), calculates **legal buy volume × selected NAV**, and renders a Turquoise-branded HTML report with two sorted tables plus an error summary.
+Reads funds from a BI Excel export, pulls market data from TSETMC (via `pytse_client` + CDN), calculates **legal buy volume × selected NAV**, and renders a Turquoise-branded HTML report with two sorted tables, day-over-day deltas, market as-of banner, and an error summary.
 
 ## Project layout
 
@@ -14,20 +14,15 @@ gold_cursor/
 ├── requirements.txt
 ├── .env.example
 ├── data/
-│   └── طلا.xlsx            # BI gold-fund export
+│   ├── طلا.xlsx            # BI gold-fund export
+│   ├── inscode_cache.json  # resolved insCodes (speeds up runs)
+│   └── history/            # daily value snapshots for DoD %
 ├── report/
 │   └── template.html       # Jinja2 HTML (Turquoise IDM styling)
 ├── src/
-│   ├── main.py
-│   ├── bi_loader.py
-│   ├── tsetmc_client.py
-│   ├── tsetmc_libs.py
-│   ├── market_hours.py     # Tehran gold-session calendar
-│   ├── fund_calculator.py
-│   ├── batch.py
-│   └── report_generator.py
+├── tests/
 ├── output/                 # generated HTML reports (gitignored)
-└── logs/                   # run logs (gitignored)
+└── logs/                   # rotating run logs (gitignored)
 ```
 
 ## Setup
@@ -49,7 +44,7 @@ TSETMC_PROXY=http://user:pass@host:port
 TSETMC_PROXY=socks5://127.0.0.1:1080
 ```
 
-`config.yaml` reads this via `${TSETMC_PROXY}`. Leave empty when your machine can reach `cdn.tsetmc.com` / `old.tsetmc.com` directly.
+`config.yaml` reads this via `${TSETMC_PROXY}`. Leave empty when your machine can reach `cdn.tsetmc.com` / `old.tsetmc.com` directly. `--health-check` prints a proxy hint when probes time out without a proxy.
 
 ## Commands
 
@@ -58,14 +53,32 @@ python main.py --health-check
 python main.py --symbol آتش
 python main.py --mock-report
 python main.py --all
+python main.py --all --require-open-market
+python -m pytest
 ```
 
 | Command | Purpose |
 |---------|---------|
-| `--health-check` | DNS / HTTPS / API latency to TSETMC |
+| `--health-check` | DNS / HTTPS / API latency; suggests `TSETMC_PROXY` on timeout |
 | `--symbol SYMBOL` | Value one fund + write `data/debug/<slug>_result.json` |
 | `--mock-report` | Offline HTML layout check → `output/gold_fund_report_mock.html` |
 | `--all` | Batch all BI funds → `output/gold_fund_report_YYYY-MM-DD.html` |
+| `--all --require-open-market` | Skip batch when gold session is closed (override with `--force`) |
+
+### Schedule (recommended)
+
+Run the batch **during** the gold session (Sat–Wed **12:00–18:00** Tehran), e.g. daily at **12:15**:
+
+**Windows Task Scheduler** (PowerShell example):
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "D:\gold_cursor\.venv\Scripts\python.exe" `
+  -Argument "main.py --all --require-open-market" -WorkingDirectory "D:\gold_cursor"
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Saturday,Sunday,Monday,Tuesday,Wednesday -At 12:15PM
+Register-ScheduledTask -TaskName "GoldFundValuation" -Action $action -Trigger $trigger
+```
+
+Or set `batch.require_open_market: true` in `config.yaml`.
 
 ## Configuration
 
@@ -73,10 +86,11 @@ Edit `config.yaml` for paths, timeouts, retries, provider, mock data, validation
 
 Important keys:
 
-- `api.provider`: `preferred` (libs) or `cdn`
+- `api.provider`: `preferred` (pytse) or `cdn`
 - `api.proxy`: `${TSETMC_PROXY}`
 - `features.use_mock_data`: offline calculation without TSETMC
-- `batch.enabled`: allow `--all`
+- `batch.enabled` / `batch.max_workers` / `batch.require_open_market`
+- `logging.max_bytes` / `logging.backup_count` — rotating file logs
 - `market_hours`: gold ETF session (default Sat–Wed **12:00–18:00** `Asia/Tehran`)
 
 ## Valuation rules
@@ -99,10 +113,10 @@ Business logic:
    - If `last_price <= nav_redemption` → **Redemption** → selected price = redemption NAV
    - Else → **Issue/Redemption** → selected price = **issue/redemption NAV** (`pSubTran`)
 3. **Fund value** = `legal_buy_volume × selected_price`
-4. **insCode**: Excel `TseId` is often float64-corrupted. Resolve via pytse map (when near Excel) or TSETMC search (prefer خرده/اصلی); Excel is a near-match hint.
+4. **insCode**: Excel `TseId` is often float64-corrupted. Resolve via pytse map / local cache / TSETMC search (prefer خرده/اصلی).
 5. **Batch**: process **primary** BI rows only; never abort on one fund failure; always write HTML with Error Summary. Skip NULL `TseId` rows and list them as errors.
 6. **Live mode**: forbid mock TseIds (`999…`, `888…`).
-7. **HTML**: column `Calculated Value (Rial)`; internal valuation footer. Tables: Redemption (ابطال‌ها) and Issue/Redemption (صدور/ابطال‌ها), sorted by value descending.
+7. **HTML**: market OPEN/CLOSED banner + legal-volume as-of; `Calculated Value (Rial)` and **DoD %** vs prior `data/history/values_*.json`.
 
 ### Gold market hours
 
@@ -118,8 +132,8 @@ Gold funds trade **Saturday–Wednesday, 12:00–18:00 Tehran time**. Outside th
 
 ## Data access
 
-- Prefer `pytse_client` / `finpy_tse`-style calls (`instinfofast`, `clienttype.aspx`, CDN search) with CDN httpx fallback
-- ETF dual NAV via CDN `GetETFByInsCode` when libs do not expose it cleanly
+- Prefer `pytse_client` calls (`instinfofast`, `clienttype.aspx`, CDN search) with CDN httpx fallback
+- ETF dual NAV via CDN `GetETFByInsCode`
 - Do not invent prices, NAVs, or volumes when live/history data is missing — fail that fund and continue the batch
 
 ## Adding funds
