@@ -5,6 +5,7 @@ Examples:
   python main.py --mock-report
   python main.py --health-check
   python main.py --all
+  python main.py --all --require-open-market
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +31,7 @@ from bi_loader import (
     validate_for_processing,
 )
 from fund_calculator import value_fund_record
+from market_hours import gold_market_is_open, gold_market_status_message
 from report_generator import (
     format_poc_output,
     generate_mock_html_report,
@@ -46,13 +49,19 @@ from tsetmc_client import (
 def setup_logging(name: str = "run") -> None:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     log_path = config.LOG_DIR / f"{name}.log"
+    file_handler = RotatingFileHandler(
+        log_path,
+        maxBytes=config.LOG_MAX_BYTES,
+        backupCount=config.LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler(log_path, encoding="utf-8"),
+            file_handler,
         ],
         force=True,
     )
@@ -78,8 +87,6 @@ def run_symbol(symbol: str) -> int:
         config.USE_MOCK_DATA,
         bool(config.TSETMC_PROXY),
     )
-    from market_hours import gold_market_status_message
-
     logger.info("%s", gold_market_status_message())
     try:
         with create_client() as client:
@@ -121,6 +128,8 @@ def run_health_check() -> int:
     with create_client() as client:
         result = client.health_check()
     _print_health(result)
+    if result.suggest_proxy:
+        return 1
     return 0 if result.ok else 1
 
 
@@ -143,16 +152,33 @@ def _print_health(result: HealthCheckResult) -> None:
     if result.api_error:
         print(f"  Error: {result.api_error}")
     print(f"Overall: {'PASS' if result.ok else 'FAIL'}")
+    if result.suggest_proxy:
+        print(
+            "\nHint: TSETMC looks unreachable (timeout/connect). "
+            "If Cursor VPN blocks Iranian hosts, set an Iran-exit proxy:\n"
+            "  TSETMC_PROXY=http://user:pass@host:port\n"
+            "  # or socks5://127.0.0.1:1080\n"
+            "Then re-run: python main.py --health-check"
+        )
 
 
-def run_all() -> int:
+def run_all(*, require_open_market: bool = False, force: bool = False) -> int:
     setup_logging("batch")
     logger = logging.getLogger("main")
     if not config.BATCH_ENABLED:
         print("BATCH_ENABLED is False — refusing to run --all")
         return 2
 
+    must_be_open = require_open_market or config.BATCH_REQUIRE_OPEN_MARKET
+    if must_be_open and not force and not gold_market_is_open():
+        msg = gold_market_status_message()
+        logger.error("Refusing --all while market closed: %s", msg)
+        print(f"\nMarket closed — batch skipped.\n{msg}")
+        print("Re-run after session open, or pass --force to override.")
+        return 3
+
     logger.info("Starting batch (--all), provider=%s", config.TSETMC_PROVIDER)
+    logger.info("%s", gold_market_status_message())
     summary = run_batch_pipeline(execute=True)
     print(
         f"\nBatch complete: ok={summary.ok_count} "
@@ -191,6 +217,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Process all funds (gated by config.BATCH_ENABLED)",
     )
+    parser.add_argument(
+        "--require-open-market",
+        action="store_true",
+        help="With --all: exit if gold session is closed (Sat–Wed 12:00–18:00 Tehran)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --all: ignore require-open-market / config gate",
+    )
     return parser
 
 
@@ -202,7 +238,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.mock_report:
         return run_mock_report()
     if args.all:
-        return run_all()
+        return run_all(
+            require_open_market=args.require_open_market,
+            force=args.force,
+        )
     return run_symbol(args.symbol)
 
 

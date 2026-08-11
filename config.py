@@ -57,6 +57,7 @@ def _path(key: str, default: str) -> Path:
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = _path("raw_dir", "data/raw")
 DEBUG_DIR = _path("debug_dir", "data/debug")
+HISTORY_DIR = _path("history_dir", "data/history")
 OUTPUT_DIR = _path("output_dir", "output")
 LOG_DIR = _path("log_dir", "logs")
 REPORT_DIR = _path("report_dir", "report")
@@ -69,6 +70,11 @@ REPORT_TEMPLATE_NAME = Path(
 _BATCH = _CFG.get("batch") or {}
 BATCH_ENABLED = bool(_BATCH.get("enabled", True))
 BATCH_MAX_WORKERS = max(1, int(_BATCH.get("max_workers", 4)))
+BATCH_REQUIRE_OPEN_MARKET = bool(_BATCH.get("require_open_market", False))
+
+_LOG = _CFG.get("logging") or {}
+LOG_MAX_BYTES = int(_LOG.get("max_bytes", 1_048_576))
+LOG_BACKUP_COUNT = int(_LOG.get("backup_count", 5))
 
 _API = _CFG.get("api") or {}
 TSETMC_PROVIDER = str(_API.get("provider", "preferred"))

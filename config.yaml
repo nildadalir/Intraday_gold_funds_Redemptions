@@ -9,14 +9,21 @@ paths:
   log_dir: "logs"
   raw_dir: "data/raw"
   debug_dir: "data/debug"
+  history_dir: "data/history"
 
 batch:
   enabled: true
   # Parallel fund workers (each owns its own HTTP client). 1 = sequential.
   max_workers: 4
+  # If true, --all exits when gold session is closed (unless --force).
+  require_open_market: false
+
+logging:
+  max_bytes: 1048576
+  backup_count: 5
 
 api:
-  # preferred = pytse_client + finpy_tse (CDN for ETF NAV / fallback)
+  # preferred = pytse_client URLs + CDN httpx (ETF NAV / fallbacks)
   # cdn      = direct cdn.tsetmc.com httpx only
   provider: "preferred"
   base_url: "https://cdn.tsetmc.com"
