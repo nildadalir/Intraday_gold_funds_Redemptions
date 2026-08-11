@@ -248,6 +248,15 @@ class PreferredLibsClient(TsetmcClient):
             self._search_cache[cache_key] = hits
             return list(hits)
 
+        # Avoid a third CDN round-trip when lib searches already timed out.
+        if not cdn_ok and config.FAIL_FAST_ON_TIMEOUT:
+            logger.warning(
+                "lib search empty for %r after timeouts; skipping httpx fallback",
+                query,
+            )
+            self._search_cache[cache_key] = []
+            return []
+
         logger.warning("lib search empty for %r; httpx CDN fallback", query)
         hits = super().search_instruments(query)
         self._search_cache[cache_key] = hits

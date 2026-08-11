@@ -28,6 +28,8 @@ api:
   lib_timeout_seconds: 8
   # Call legacy search.aspx only when CDN has no exact symbol hit.
   search_legacy_fallback: true
+  # Stop cascading alternate endpoints after the first network timeout.
+  fail_fast_on_timeout: true
   retry:
     max_attempts: 2
     backoff_seconds: 1
@@ -58,7 +60,7 @@ market_hours:
 
 poc:
   symbol: "آتش"
-  tse_id: "56987424987755400"
+  tse_id: "56987424987755487"
 
 mock:
   atash:

@@ -77,6 +77,7 @@ TSETMC_TIMEOUT_SECONDS = float(_API.get("timeout_seconds", 15))
 TSETMC_CONNECT_TIMEOUT_SECONDS = float(_API.get("connect_timeout_seconds", 8))
 TSETMC_LIB_TIMEOUT_SECONDS = float(_API.get("lib_timeout_seconds", 8))
 SEARCH_LEGACY_FALLBACK = bool(_API.get("search_legacy_fallback", True))
+FAIL_FAST_ON_TIMEOUT = bool(_API.get("fail_fast_on_timeout", True))
 _RETRY = _API.get("retry") or {}
 TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))
 TSETMC_RETRY_WAIT_SECONDS = float(_RETRY.get("backoff_seconds", 1))

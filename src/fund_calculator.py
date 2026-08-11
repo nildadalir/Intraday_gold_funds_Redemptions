@@ -127,24 +127,41 @@ def resolve_fund_ins_code(
     BI Excel TseId is often float-corrupted (16–17 digit IDs). Prefer an
     exact search hit for the fund symbol (خرده فروشی / اصلی when available);
     use Excel only as a near-match hint. Falls back to pytse_client's static
-    symbol map when search has no hit. Tries the offline map first when it
-    is within Excel float tolerance (avoids a network search).
+    symbol map when search has no hit. Tries the offline map / local cache
+    first when within Excel float tolerance (avoids a network search).
     """
-    mapped = _ins_code_from_pytse_map(fund_symbol)
-    if mapped and excel_tse_id is not None:
+    from inscode_cache import get_cached_ins_code, put_cached_ins_code
+
+    def _excel_near(candidate: str) -> bool:
+        if excel_tse_id is None:
+            return True
         try:
-            excel_i = int(str(excel_tse_id).strip())
-            mapped_i = int(mapped)
-            if abs(mapped_i - excel_i) <= _EXCEL_FLOAT_TSEID_TOLERANCE:
-                logger.info(
-                    "Resolved fund insCode for %s via pytse map "
-                    "(Excel near-match): %s",
-                    fund_symbol,
-                    mapped,
-                )
-                return mapped
+            return (
+                abs(int(candidate) - int(str(excel_tse_id).strip()))
+                <= _EXCEL_FLOAT_TSEID_TOLERANCE
+            )
         except ValueError:
-            pass
+            return False
+
+    mapped = _ins_code_from_pytse_map(fund_symbol)
+    if mapped and _excel_near(mapped):
+        logger.info(
+            "Resolved fund insCode for %s via pytse map "
+            "(Excel near-match): %s",
+            fund_symbol,
+            mapped,
+        )
+        put_cached_ins_code(fund_symbol, mapped)
+        return mapped
+
+    cached = get_cached_ins_code(fund_symbol)
+    if cached and _excel_near(cached):
+        logger.info(
+            "Resolved fund insCode for %s via local cache: %s",
+            fund_symbol,
+            cached,
+        )
+        return cached
 
     hits = client.search_instruments(fund_symbol)
     fund_norm = _normalize_symbol(fund_symbol)
@@ -156,7 +173,15 @@ def resolve_fund_ins_code(
                 fund_symbol,
                 mapped,
             )
+            put_cached_ins_code(fund_symbol, mapped)
             return mapped
+        if cached:
+            logger.warning(
+                "No search hit for %s; using cached insCode %s",
+                fund_symbol,
+                cached,
+            )
+            return cached
         raise TsetmcDataError(
             f"No TSETMC search hit for fund symbol {fund_symbol!r}"
         )
@@ -179,6 +204,7 @@ def resolve_fund_ins_code(
             fund_symbol,
             chosen.ins_code,
         )
+        put_cached_ins_code(fund_symbol, chosen.ins_code)
         return chosen.ins_code
 
     excel_s = str(excel_tse_id).strip()
@@ -189,6 +215,7 @@ def resolve_fund_ins_code(
                 fund_symbol,
                 excel_s,
             )
+            put_cached_ins_code(fund_symbol, hit.ins_code)
             return hit.ins_code
 
     try:
@@ -218,6 +245,7 @@ def resolve_fund_ins_code(
                 fund_symbol,
                 delta,
             )
+        put_cached_ins_code(fund_symbol, best.ins_code)
         return best.ins_code
 
     chosen = pool[0]
@@ -227,6 +255,7 @@ def resolve_fund_ins_code(
         fund_symbol,
         chosen.ins_code,
     )
+    put_cached_ins_code(fund_symbol, chosen.ins_code)
     return chosen.ins_code
 
 
@@ -246,7 +275,10 @@ def value_fund(
     try:
         resolved_code = resolve_fund_ins_code(client, symbol, tse_id)
     except TsetmcError as exc:
+        from inscode_cache import get_cached_ins_code
+
         mapped = _ins_code_from_pytse_map(symbol)
+        cached = get_cached_ins_code(symbol)
         if mapped:
             logger.warning(
                 "insCode search failed for %s (%s); using pytse map %s",
@@ -255,6 +287,14 @@ def value_fund(
                 mapped,
             )
             resolved_code = mapped
+        elif cached:
+            logger.warning(
+                "insCode search failed for %s (%s); using cache %s",
+                symbol,
+                exc,
+                cached,
+            )
+            resolved_code = cached
         else:
             logger.warning(
                 "insCode search failed for %s (%s); falling back to Excel TseId %s",

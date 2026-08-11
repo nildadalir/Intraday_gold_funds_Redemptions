@@ -113,7 +113,8 @@ Gold funds trade **Saturday–Wednesday, 11:45–18:00 Tehran time**. Outside th
 - `batch.max_workers` — parallel fund valuation (default `4`; set `1` for sequential)
 - `api.save_raw_responses` — off by default (enable only when debugging)
 - `api.search_legacy_fallback` — legacy `search.aspx` only when CDN misses the exact symbol
-- Offline pytse symbol map used first when it is within Excel float tolerance
+- Offline pytse symbol map / `data/inscode_cache.json` used first when near Excel float tolerance
+- `api.fail_fast_on_timeout` — stop cascading endpoints after the first network timeout
 
 ## Data access
 
