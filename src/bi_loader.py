@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,10 @@ REQUIRED_COLUMNS = (
     "InstrumentCode",
     "TseId",
 )
+
+# Newer BI exports include *2/*3/*4 boards; valuation uses main board only.
+_BOARD_SUFFIX_RE = re.compile(r"[234]$")
+_MAIN_MARKET_TOKEN = "اصلی"
 
 
 class BiLoadError(Exception):
@@ -39,7 +44,8 @@ class FundRecord:
     instrument: str
     instrument_code: str
     tse_id: int | None
-    raw: dict[str, Any]
+    market: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
 
     @property
     def asset(self) -> str:
@@ -77,7 +83,33 @@ def parse_tse_id(value: Any) -> int | None:
         raise BiValidationError(f"Unparseable TseId: {value!r}") from exc
 
 
-def load_fund_rows(excel_path: Path | None = None) -> list[FundRecord]:
+def is_board_variant_instrument(instrument: str) -> bool:
+    """True for secondary boards like طلا2 / آتش3 / زر4."""
+    name = instrument.strip()
+    return bool(name) and bool(_BOARD_SUFFIX_RE.search(name))
+
+
+def is_primary_fund_row(instrument: str, market: str | None = None) -> bool:
+    """
+    Keep valuation targets only: main-board base symbols.
+
+    New BI file uses Market=بازار معاملات اصلی (not خرده فروشی).
+    Rows ending in 2/3/4 are آد-لات / جبرانی / بلوکی boards.
+    """
+    if not instrument or is_board_variant_instrument(instrument):
+        return False
+    if market:
+        market_norm = market.replace("\u200c", "").strip()
+        if _MAIN_MARKET_TOKEN not in market_norm and "خرده" not in market_norm:
+            return False
+    return True
+
+
+def load_fund_rows(
+    excel_path: Path | None = None,
+    *,
+    primary_only: bool = True,
+) -> list[FundRecord]:
     path = excel_path or config.EXCEL_PATH
     if not path.exists():
         raise BiLoadError(f"BI Excel not found: {path}")
@@ -96,6 +128,7 @@ def load_fund_rows(excel_path: Path | None = None) -> list[FundRecord]:
             raise BiLoadError(f"BI Excel missing columns: {missing}")
 
         records: list[FundRecord] = []
+        skipped_boards = 0
         for row_num, row in enumerate(rows_iter, start=2):
             if row is None or all(v is None for v in row):
                 continue
@@ -107,6 +140,11 @@ def load_fund_rows(excel_path: Path | None = None) -> list[FundRecord]:
             instrument = _cell_str(col("Instrument"))
             if instrument is None:
                 logger.warning("Skipping row %s: empty Instrument", row_num)
+                continue
+
+            market = _cell_str(col("Market")) if "Market" in index else None
+            if primary_only and not is_primary_fund_row(instrument, market):
+                skipped_boards += 1
                 continue
 
             try:
@@ -126,8 +164,14 @@ def load_fund_rows(excel_path: Path | None = None) -> list[FundRecord]:
                     instrument=instrument,
                     instrument_code=_cell_str(col("InstrumentCode")) or "",
                     tse_id=tse_id,
+                    market=market or "",
                     raw=raw,
                 )
+            )
+        if primary_only and skipped_boards:
+            logger.info(
+                "Filtered out %s non-primary board rows (*2/*3/*4 or non-main market)",
+                skipped_boards,
             )
         return records
     finally:
@@ -137,16 +181,26 @@ def load_fund_rows(excel_path: Path | None = None) -> list[FundRecord]:
 def get_fund_by_symbol(
     symbol: str, excel_path: Path | None = None
 ) -> FundRecord:
-    rows = load_fund_rows(excel_path)
+    rows = load_fund_rows(excel_path, primary_only=True)
     matches = [r for r in rows if r.instrument == symbol]
+    if not matches:
+        # Fall back to full sheet so --symbol آتش2 can still be inspected.
+        rows = load_fund_rows(excel_path, primary_only=False)
+        matches = [r for r in rows if r.instrument == symbol]
     if not matches:
         raise BiLoadError(f"Symbol {symbol!r} not found in BI Excel")
     if len(matches) > 1:
+        primary = [
+            r for r in matches if is_primary_fund_row(r.instrument, r.market)
+        ]
+        chosen = primary[0] if primary else matches[0]
         logger.warning(
-            "Multiple BI rows for %s; using first (InstrumentId=%s)",
+            "Multiple BI rows for %s; using InstrumentId=%s Market=%s",
             symbol,
-            matches[0].instrument_id,
+            chosen.instrument_id,
+            chosen.market,
         )
+        return chosen
     return matches[0]
 
 
@@ -164,11 +218,11 @@ def iter_processable_funds(
     excel_path: Path | None = None,
 ) -> tuple[list[FundRecord], list[FundRecord]]:
     """
-    Split BI rows into (processable, skipped).
+    Split primary BI rows into (processable, skipped).
 
     Skipped = NULL / missing TseId (logged by caller).
     """
-    rows = load_fund_rows(excel_path)
+    rows = load_fund_rows(excel_path, primary_only=True)
     processable: list[FundRecord] = []
     skipped: list[FundRecord] = []
     for row in rows:
