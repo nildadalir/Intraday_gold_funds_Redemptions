@@ -78,6 +78,9 @@ def run_symbol(symbol: str) -> int:
         config.USE_MOCK_DATA,
         bool(config.TSETMC_PROXY),
     )
+    from market_hours import gold_market_status_message
+
+    logger.info("%s", gold_market_status_message())
     try:
         with create_client() as client:
             client.raw_label = symbol_slug(symbol)

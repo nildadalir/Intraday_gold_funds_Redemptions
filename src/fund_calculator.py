@@ -1,15 +1,14 @@
-"""Fund valuation logic and market-instrument resolution."""
+"""Fund valuation logic (retail board last/NAV/legal volume)."""
 
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 import config
+from market_hours import gold_market_is_open, gold_market_status_message
 from tsetmc_client import (
-    SearchHit,
     TsetmcClient,
     TsetmcDataError,
     TsetmcError,
@@ -21,9 +20,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 Category = Literal["Redemption", "Issue/Redemption"]
-
-# Arabic / Persian digits for "2"
-_MARKET_SUFFIXES = ("2", "۲", "٢")
 
 
 @dataclass(frozen=True)
@@ -54,17 +50,13 @@ class ValuationResult:
         return self.symbol
 
 
-class MarketInstrumentNotFoundError(TsetmcError):
-    """Could not resolve a validated market instrument for a fund."""
-
-
 class InvalidMarketTseIdError(TsetmcDataError):
-    """Market TseId missing, invalid, or a mock placeholder in live mode."""
+    """Instrument TseId missing, invalid, or a mock placeholder in live mode."""
 
 
 def validate_live_market_tseid(market_tse_id: str | None) -> str:
     """
-    Production guard: reject missing/invalid/mock market TseIds when not mocking.
+    Production guard: reject missing/invalid/mock TseIds when not mocking.
     """
     if config.USE_MOCK_DATA:
         if market_tse_id is None or str(market_tse_id).strip() == "":
@@ -106,131 +98,119 @@ def _normalize_symbol(value: str) -> str:
     return value.translate(trans).strip()
 
 
-def _is_market_symbol_for_fund(fund_symbol: str, candidate_symbol: str) -> bool:
-    fund = _normalize_symbol(fund_symbol)
-    cand = _normalize_symbol(candidate_symbol)
-    if cand == fund:
-        return False
-    for suffix in ("2",):
-        if cand == f"{fund}{suffix}":
-            return True
-    # Allow minor whitespace / zero-width differences already stripped
-    return bool(re.fullmatch(re.escape(fund) + r"2", cand))
+# Excel stores large TseIds as float64; BI exports often drift by tens–hundreds.
+_EXCEL_FLOAT_TSEID_TOLERANCE = 512
 
 
-def resolve_market_instrument(
+def _ins_code_from_pytse_map(fund_symbol: str) -> str | None:
+    """Offline symbol→insCode from pytse_client's bundled map (may be stale)."""
+    try:
+        from pytse_client.symbols_data import get_ticker_index
+
+        idx = get_ticker_index(fund_symbol)
+        if idx is None:
+            return None
+        return str(idx).strip() or None
+    except Exception as exc:
+        logger.debug("pytse symbol map lookup failed for %s: %s", fund_symbol, exc)
+        return None
+
+
+def resolve_fund_ins_code(
     client: TsetmcClient,
     fund_symbol: str,
-    fund_tse_id: int | str,
-) -> SearchHit:
+    excel_tse_id: int | str | None = None,
+) -> str:
     """
-    Resolve market instrument (e.g. آتش2) with validation beyond string match.
+    Resolve the retail fund share insCode via TSETMC search.
 
-    Validation:
-    1. Symbol equals fund + 2 / ۲
-    2. Candidate is active
-    3. Different insCode from the fund
-    4. Instrument name is similar to the fund name
-    5. Client-type endpoint returns usable data
+    BI Excel TseId is often float-corrupted (16–17 digit IDs). Prefer an
+    exact search hit for the fund symbol (خرده فروشی when available);
+    use Excel only as a near-match hint. Falls back to pytse_client's static
+    symbol map when search has no hit.
     """
-    queries = [f"{fund_symbol}{s}" for s in _MARKET_SUFFIXES]
-    # Also search bare fund symbol to catch related listings
-    queries.append(fund_symbol)
-
-    seen_codes: set[str] = set()
-    candidates: list[SearchHit] = []
-    for query in queries:
-        for hit in client.search_instruments(query):
-            if hit.ins_code in seen_codes:
-                continue
-            seen_codes.add(hit.ins_code)
-            candidates.append(hit)
-
-    fund_code = str(fund_tse_id)
-    scored: list[tuple[int, SearchHit, str]] = []
-
-    for hit in candidates:
-        if hit.ins_code == fund_code:
-            continue
-        if not _is_market_symbol_for_fund(fund_symbol, hit.symbol):
-            continue
-        if not hit.is_active:
+    hits = client.search_instruments(fund_symbol)
+    fund_norm = _normalize_symbol(fund_symbol)
+    exact = [h for h in hits if _normalize_symbol(h.symbol) == fund_norm]
+    if not exact:
+        mapped = _ins_code_from_pytse_map(fund_symbol)
+        if mapped:
             logger.warning(
-                "Skipping inactive market candidate %s (%s)",
-                hit.symbol,
-                hit.ins_code,
+                "No search hit for %s; using pytse map insCode %s",
+                fund_symbol,
+                mapped,
             )
-            continue
-
-        score = 0
-        reasons: list[str] = []
-
-        # Exact market-suffix symbol match
-        score += 50
-        reasons.append("symbol_suffix_match")
-
-        # Name similarity: market name usually contains fund name
-        fund_norm = _normalize_symbol(fund_symbol)
-        name_norm = _normalize_symbol(hit.name)
-        if fund_norm and fund_norm in name_norm:
-            score += 20
-            reasons.append("name_contains_fund")
-
-        # Prefer listings whose market title is not the retail fund page
-        market_blob = f"{hit.flow_title} {hit.market_title}".lower()
-        if "خرده" in market_blob or "retail" in market_blob:
-            score -= 15
-            reasons.append("retail_market_penalty")
-        else:
-            score += 10
-            reasons.append("non_retail_market")
-
-        # Must expose client-type data (legal volume source)
-        try:
-            ct = client.get_client_type(hit.ins_code)
-            if ct.buy_n_volume < 0 or ct.sell_n_volume < 0:
-                raise TsetmcDataError("negative client volumes")
-            score += 25
-            reasons.append("client_type_ok")
-        except TsetmcError as exc:
-            logger.warning(
-                "Market candidate %s (%s) failed client-type check: %s",
-                hit.symbol,
-                hit.ins_code,
-                exc,
-            )
-            continue
-
-        # Soft check: instrument info reachable
-        try:
-            info = client.get_instrument_info(hit.ins_code)
-            l18 = str(info.get("lVal18AFC") or "")
-            if _is_market_symbol_for_fund(fund_symbol, l18):
-                score += 10
-                reasons.append("instrument_info_confirmed")
-        except TsetmcError as exc:
-            logger.warning(
-                "Could not load instrumentInfo for %s: %s", hit.ins_code, exc
-            )
-
-        scored.append((score, hit, ",".join(reasons)))
-
-    if not scored:
-        raise MarketInstrumentNotFoundError(
-            f"No validated market instrument found for fund {fund_symbol!r}"
+            return mapped
+        raise TsetmcDataError(
+            f"No TSETMC search hit for fund symbol {fund_symbol!r}"
         )
+    pool = [h for h in exact if h.is_active] or exact
 
-    scored.sort(key=lambda item: item[0], reverse=True)
-    best_score, best, reasons = scored[0]
-    logger.info(
-        "Resolved market instrument for %s -> %s (%s) score=%s reasons=%s",
+    # Prefer retail (خرده فروشی) share for last price / NAV / legal volume
+    retail = [
+        h
+        for h in pool
+        if "خرده" in f"{h.flow_title} {h.market_title}"
+    ]
+    if retail:
+        pool = retail
+
+    if excel_tse_id is None:
+        chosen = pool[0]
+        logger.info(
+            "Resolved fund insCode for %s via search: %s",
+            fund_symbol,
+            chosen.ins_code,
+        )
+        return chosen.ins_code
+
+    excel_s = str(excel_tse_id).strip()
+    for hit in pool:
+        if hit.ins_code == excel_s:
+            logger.info(
+                "Fund insCode for %s matches Excel TseId: %s",
+                fund_symbol,
+                excel_s,
+            )
+            return hit.ins_code
+
+    try:
+        excel_i = int(excel_s)
+    except ValueError:
+        excel_i = None
+
+    if excel_i is not None:
+        ranked = sorted(pool, key=lambda h: abs(int(h.ins_code) - excel_i))
+        best = ranked[0]
+        delta = abs(int(best.ins_code) - excel_i)
+        if delta <= _EXCEL_FLOAT_TSEID_TOLERANCE:
+            logger.warning(
+                "Excel TseId %s looks float-corrupted for %s; "
+                "using search insCode %s (delta=%s)",
+                excel_s,
+                fund_symbol,
+                best.ins_code,
+                delta,
+            )
+        else:
+            logger.warning(
+                "Excel TseId %s differs from search insCode %s for %s "
+                "(delta=%s); preferring search",
+                excel_s,
+                best.ins_code,
+                fund_symbol,
+                delta,
+            )
+        return best.ins_code
+
+    chosen = pool[0]
+    logger.warning(
+        "Unusable Excel TseId %r for %s; using search insCode %s",
+        excel_tse_id,
         fund_symbol,
-        best.symbol,
-        best.ins_code,
-        best_score,
-        reasons,
+        chosen.ins_code,
     )
-    return best
+    return chosen.ins_code
 
 
 def value_fund(
@@ -243,15 +223,49 @@ def value_fund(
     instrument_code: str = "",
 ) -> ValuationResult:
     logger.info("Processing %s", symbol)
-    logger.info("TseId: %s", tse_id)
+    logger.info("Excel TseId: %s", tse_id)
+    logger.info("%s", gold_market_status_message())
 
-    last_price = client.get_last_trade_price(tse_id)
-    logger.info("Last Price: %s", int(last_price) if last_price.is_integer() else last_price)
+    try:
+        resolved_code = resolve_fund_ins_code(client, symbol, tse_id)
+    except TsetmcError as exc:
+        mapped = _ins_code_from_pytse_map(symbol)
+        if mapped:
+            logger.warning(
+                "insCode search failed for %s (%s); using pytse map %s",
+                symbol,
+                exc,
+                mapped,
+            )
+            resolved_code = mapped
+        else:
+            logger.warning(
+                "insCode search failed for %s (%s); falling back to Excel TseId %s",
+                symbol,
+                exc,
+                tse_id,
+            )
+            resolved_code = str(tse_id)
+    resolved_tse_id = int(resolved_code)
+    if resolved_tse_id != int(tse_id):
+        logger.warning(
+            "Using search insCode %s instead of Excel TseId %s for %s",
+            resolved_tse_id,
+            tse_id,
+            symbol,
+        )
+    else:
+        logger.info("TseId: %s", resolved_tse_id)
 
-    nav = client.get_etf_nav(tse_id)
+    last_price = client.get_last_trade_price(resolved_tse_id)
+    logger.info(
+        "Last Price: %s", int(last_price) if last_price.is_integer() else last_price
+    )
+
+    nav = client.get_etf_nav(resolved_tse_id)
     logger.info("NAV Redemption: %s", nav.redemption)
     logger.info(
-        "NAV Issue: %s",
+        "NAV Issue/Redemption: %s",
         "N/A" if nav.issue is None else nav.issue,
     )
 
@@ -268,14 +282,32 @@ def value_fund(
     logger.info("Category: %s", category)
     logger.info("Selected Price: %s", selected_price)
 
-    market = resolve_market_instrument(client, symbol, tse_id)
-    market_tse_id = validate_live_market_tseid(market.ins_code)
-    logger.info("Market Symbol: %s (%s)", market.symbol, market_tse_id)
+    # Legal volume from the retail (خرده فروشی) board — same instrument as
+    # last price / NAV — not from the market-maker {symbol}2 page.
+    retail_tse_id = validate_live_market_tseid(str(resolved_tse_id))
+    logger.info("Retail board for legal volume: %s (%s)", symbol, retail_tse_id)
 
-    client_type = client.get_client_type(market_tse_id)
+    client_type = client.get_client_type(retail_tse_id)
     legal_buy = client_type.buy_n_volume
     legal_sell = client_type.sell_n_volume
     warnings: list[str] = []
+    if not gold_market_is_open():
+        warnings.append(
+            "gold market closed (Tehran session Sat–Wed 11:45–18:00); "
+            "used last available session data where live boards were empty"
+        )
+    if client_type.as_of_date and client_type.source not in {
+        "live",
+        "pytse_instinfofast",
+    }:
+        warnings.append(
+            f"legal volume from {client_type.source} as_of={client_type.as_of_date}"
+        )
+        logger.info(
+            "Legal volume source=%s as_of=%s",
+            client_type.source,
+            client_type.as_of_date,
+        )
     if legal_buy != legal_sell:
         warning = (
             f"legal buy/sell mismatch: buy_N_Volume={legal_buy} "
@@ -285,8 +317,8 @@ def value_fund(
         logger.warning(warning)
     if legal_buy <= 0:
         raise TsetmcDataError(
-            f"Missing/zero legal buy volume for market {market.symbol} "
-            f"({market_tse_id}): buy_N_Volume={legal_buy}"
+            f"Missing/zero legal buy volume for retail {symbol} "
+            f"({retail_tse_id}): buy_N_Volume={legal_buy}"
         )
 
     logger.info("Legal Volume (buy_N): %s", int(legal_buy))
@@ -297,12 +329,12 @@ def value_fund(
 
     return ValuationResult(
         symbol=symbol,
-        tse_id=tse_id,
+        tse_id=resolved_tse_id,
         last_trade_price=last_price,
         nav_redemption=nav.redemption,
         nav_issue=nav.issue,
-        market_symbol=market.symbol,
-        market_tse_id=market_tse_id,
+        market_symbol=symbol,
+        market_tse_id=retail_tse_id,
         legal_buy_volume=legal_buy,
         legal_sell_volume=legal_sell,
         selected_price=selected_price,

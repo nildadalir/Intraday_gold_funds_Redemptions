@@ -37,6 +37,19 @@ api:
 features:
   use_mock_data: false
 
+# Gold ETF session (IME / commodity funds) — Tehran local time.
+# Outside this window live ClientType / boards are often zero or blank.
+market_hours:
+  timezone: "Asia/Tehran"
+  open_weekdays:
+    - saturday
+    - sunday
+    - monday
+    - tuesday
+    - wednesday
+  open_time: "11:45"
+  close_time: "18:00"
+
 poc:
   symbol: "آتش"
   tse_id: "56987424987755400"
@@ -44,14 +57,14 @@ poc:
 mock:
   atash:
     symbol: "آتش"
-    tse_id: "56987424987755400"
+    tse_id: "56987424987755487"
     last_price: 33201
     nav_redemption: 33277
     nav_issue_redemption: null
-    market_symbol: "آتش2"
-    market_tse_id: "99999999999999999"
-    legal_buy_volume: 230000000
-    legal_sell_volume: 230000000
+    market_symbol: "آتش"
+    market_tse_id: "56987424987755487"
+    legal_buy_volume: 18485000
+    legal_sell_volume: 16362000
 
 validation:
   forbidden_mock_market_tse_ids:

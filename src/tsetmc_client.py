@@ -68,6 +68,8 @@ class ClientTypeVolumes:
     sell_n_volume: float
     buy_i_volume: float
     sell_i_volume: float
+    as_of_date: int | None = None
+    source: str = "live"
 
 
 @dataclass(frozen=True)
@@ -142,10 +144,10 @@ class TsetmcClient:
         if proxy:
             client_kwargs["proxy"] = proxy
             logger.info("TSETMC client using proxy: %s", _redact_proxy(proxy))
-        elif not proxy:
-            logger.warning(
-                "No TSETMC proxy configured. If Cursor VPN blocks Iranian "
-                "hosts, set TSETMC_PROXY in .env (Iran-exit proxy)."
+        else:
+            logger.info(
+                "TSETMC proxy unset (direct). Set TSETMC_PROXY only if "
+                "Iranian hosts are blocked (e.g. Cursor VPN)."
             )
         self._client = httpx.Client(**client_kwargs)
 
@@ -159,6 +161,48 @@ class TsetmcClient:
         self.close()
 
     def get_last_trade_price(self, ins_code: int | str) -> float:
+        """
+        Last trade / last close for an instrument.
+
+        Gold ETFs often return HTTP 500 on GetClosingPriceInfo; cascade through
+        daily history and the legacy instinfofast board.
+        """
+        errors: list[str] = []
+        sources = (
+            ("ClosingPriceInfo", self._last_price_from_closing_info),
+            ("ClosingPriceDailyList", self._last_price_from_daily_list),
+            ("instinfofast", self._last_price_from_instinfofast),
+        )
+        for name, fetch in sources:
+            try:
+                value = fetch(ins_code)
+                logger.info(
+                    "last_price via %s for %s = %s", name, ins_code, value
+                )
+                return value
+            except TsetmcError as exc:
+                errors.append(f"{name}: {exc}")
+                logger.warning(
+                    "last_price %s failed for %s: %s", name, ins_code, exc
+                )
+        raise TsetmcDataError(
+            f"Could not get last price for {ins_code}; tried: "
+            + " | ".join(errors)
+        )
+
+    def _positive_price(self, raw: Any, *, ins_code: int | str, field: str) -> float:
+        if raw is None:
+            raise TsetmcDataError(
+                f"{field} missing for insCode={ins_code}"
+            )
+        value = float(raw)
+        if value <= 0:
+            raise TsetmcDataError(
+                f"Invalid {field} ({value}) for insCode={ins_code}"
+            )
+        return value
+
+    def _last_price_from_closing_info(self, ins_code: int | str) -> float:
         label = self.raw_label or str(ins_code)
         payload = self._get_json(
             f"/api/ClosingPrice/GetClosingPriceInfo/{ins_code}",
@@ -173,15 +217,80 @@ class TsetmcClient:
         if price is None:
             price = info.get("pl")
         if price is None:
+            price = info.get("pClosing")
+        return self._positive_price(
+            price, ins_code=ins_code, field="last trade price"
+        )
+
+    def _last_price_from_daily_list(self, ins_code: int | str) -> float:
+        """Most recent daily close — works when ClosingPriceInfo 500s."""
+        label = self.raw_label or str(ins_code)
+        payload = self._get_json(
+            f"/api/ClosingPrice/GetClosingPriceDailyList/{ins_code}/0",
+            raw_name=f"closing_daily_{label}",
+        )
+        rows = payload.get("closingPriceDaily")
+        if not isinstance(rows, list) or not rows:
             raise TsetmcDataError(
-                f"Last trade price missing for insCode={ins_code}"
+                f"closingPriceDaily empty for insCode={ins_code}"
             )
-        value = float(price)
-        if value <= 0:
+
+        def row_date(row: dict[str, Any]) -> int:
+            try:
+                return int(row.get("dEven") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        best = max(
+            (r for r in rows if isinstance(r, dict)),
+            key=row_date,
+            default=None,
+        )
+        if best is None:
             raise TsetmcDataError(
-                f"Invalid last trade price ({value}) for insCode={ins_code}"
+                f"closingPriceDaily has no dict rows for insCode={ins_code}"
             )
-        return value
+        price = best.get("pDrCotVal")
+        if price is None:
+            price = best.get("pClosing")
+        return self._positive_price(
+            price, ins_code=ins_code, field="daily last/close"
+        )
+
+    def _last_price_from_instinfofast(self, ins_code: int | str) -> float:
+        """Legacy TSETMC board endpoint used by pytse_client."""
+        url = (
+            "http://old.tsetmc.com/tsev2/data/instinfofast.aspx"
+            f"?i={ins_code}&c=0&e=1"
+        )
+        try:
+            response = self._client.get(url)
+        except httpx.HTTPError as exc:
+            raise TsetmcNetworkError(
+                f"instinfofast failed for {ins_code}: {exc}"
+            ) from exc
+        if response.status_code >= 400:
+            raise TsetmcResponseError(
+                f"instinfofast HTTP {response.status_code} for {ins_code}"
+            )
+        text = (response.text or "").strip()
+        preview = text[:160].replace("\n", " ")
+        if not text:
+            raise TsetmcDataError(
+                f"Empty instinfofast body for {ins_code}"
+            )
+        try:
+            price_section = text.split(";")[0].split(",")
+            value = float(price_section[2])
+        except (IndexError, ValueError) as exc:
+            raise TsetmcDataError(
+                f"Could not parse last price from instinfofast for {ins_code} "
+                f"(fields={len(text.split(';')[0].split(','))}, "
+                f"preview={preview!r})"
+            ) from exc
+        return self._positive_price(
+            value, ins_code=ins_code, field="instinfofast last price"
+        )
 
     def get_etf_nav(self, ins_code: int | str) -> EtfNav:
         label = self.raw_label or str(ins_code)
@@ -220,6 +329,60 @@ class TsetmcClient:
         )
 
     def get_client_type(self, ins_code: int | str) -> ClientTypeVolumes:
+        """
+        Legal/individual volumes for an instrument (retail board).
+
+        Intraday GetClientType is often all-zero before/after the gold session
+        (Sat–Wed 11:45–18:00 Tehran); fall back to history.
+        """
+        from market_hours import gold_market_is_open, gold_market_status_message
+
+        if not gold_market_is_open():
+            logger.info("%s", gold_market_status_message())
+            try:
+                hist = self._client_type_from_cdn_history(ins_code)
+                if hist.buy_n_volume > 0:
+                    logger.info(
+                        "client_type history (market closed) for %s date=%s "
+                        "buy_N=%s",
+                        ins_code,
+                        hist.as_of_date,
+                        hist.buy_n_volume,
+                    )
+                    return hist
+            except TsetmcError as exc:
+                logger.warning(
+                    "ClientType history failed for %s while market closed: %s",
+                    ins_code,
+                    exc,
+                )
+
+        live = self._client_type_live(ins_code)
+        if live.buy_n_volume > 0:
+            return live
+        logger.warning(
+            "Live clientType buy_N_Volume=0 for %s; trying history",
+            ins_code,
+        )
+        try:
+            hist = self._client_type_from_cdn_history(ins_code)
+        except TsetmcError as exc:
+            logger.warning(
+                "ClientType history failed for %s: %s", ins_code, exc
+            )
+            return live
+        if hist.buy_n_volume > 0:
+            logger.info(
+                "client_type history for %s date=%s buy_N=%s sell_N=%s",
+                ins_code,
+                hist.as_of_date,
+                hist.buy_n_volume,
+                hist.sell_n_volume,
+            )
+            return hist
+        return live
+
+    def _client_type_live(self, ins_code: int | str) -> ClientTypeVolumes:
         label = self.raw_label or str(ins_code)
         payload = self._get_json(
             f"/api/ClientType/GetClientType/{ins_code}/1/0",
@@ -228,20 +391,93 @@ class TsetmcClient:
         ct = payload.get("clientType")
         if not isinstance(ct, dict):
             raise TsetmcDataError(f"clientType missing for insCode={ins_code}")
-        try:
-            buy_n = float(ct["buy_N_Volume"])
-            sell_n = float(ct["sell_N_Volume"])
-            buy_i = float(ct.get("buy_I_Volume") or 0)
-            sell_i = float(ct.get("sell_I_Volume") or 0)
-        except (KeyError, TypeError, ValueError) as exc:
+        return self._volumes_from_client_type_dict(ct, source="live")
+
+    def _client_type_from_cdn_history(
+        self, ins_code: int | str
+    ) -> ClientTypeVolumes:
+        """Most recent history row with buy_N_Volume > 0 (finpy-style endpoint)."""
+        label = self.raw_label or str(ins_code)
+        payload = self._get_json(
+            f"/api/ClientType/GetClientTypeHistory/{ins_code}",
+            raw_name=f"client_type_hist_{label}",
+        )
+        rows = payload.get("clientType")
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list) or not rows:
             raise TsetmcDataError(
-                f"clientType volumes unreadable for insCode={ins_code}: {exc}"
+                f"clientType history empty for insCode={ins_code}"
+            )
+
+        parsed: list[tuple[int, ClientTypeVolumes]] = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            date_raw = (
+                row.get("recDate")
+                or row.get("RecDate")
+                or row.get("dEven")
+                or row.get("date")
+                or row.get("Date")
+                or 0
+            )
+            try:
+                date_i = int(str(date_raw).replace("-", "")[:8])
+            except (TypeError, ValueError):
+                date_i = 0
+            vols = self._volumes_from_client_type_dict(
+                row, source="cdn_history", as_of_date=date_i or None
+            )
+            parsed.append((date_i, vols))
+
+        if not parsed:
+            raise TsetmcDataError(
+                f"clientType history unreadable for insCode={ins_code}"
+            )
+
+        with_buy = [(d, v) for d, v in parsed if v.buy_n_volume > 0]
+        pool = with_buy or parsed
+        pool.sort(key=lambda item: item[0], reverse=True)
+        return pool[0][1]
+
+    def _volumes_from_client_type_dict(
+        self,
+        ct: dict[str, Any],
+        *,
+        source: str,
+        as_of_date: int | None = None,
+    ) -> ClientTypeVolumes:
+        def pick(*keys: str) -> Any:
+            for key in keys:
+                if key in ct and ct[key] is not None:
+                    return ct[key]
+            return None
+
+        try:
+            buy_n = float(
+                pick("buy_N_Volume", "Buy_N_Volume", "buy_N_Vol") or 0
+            )
+            sell_n = float(
+                pick("sell_N_Volume", "Sell_N_Volume", "sell_N_Vol") or 0
+            )
+            buy_i = float(
+                pick("buy_I_Volume", "Buy_I_Volume", "buy_I_Vol") or 0
+            )
+            sell_i = float(
+                pick("sell_I_Volume", "Sell_I_Volume", "sell_I_Vol") or 0
+            )
+        except (TypeError, ValueError) as exc:
+            raise TsetmcDataError(
+                f"clientType volumes unreadable ({source}): {exc}"
             ) from exc
         return ClientTypeVolumes(
             buy_n_volume=buy_n,
             sell_n_volume=sell_n,
             buy_i_volume=buy_i,
             sell_i_volume=sell_i,
+            as_of_date=as_of_date,
+            source=source,
         )
 
     def search_instruments(self, query: str) -> list[SearchHit]:
@@ -320,33 +556,51 @@ class TsetmcClient:
         api_latency_ms: float | None = None
         api_error: str | None = None
 
+        # Prefer lightweight / reliable probes. ClosingPrice for a single
+        # commodity ETF can return HTTP 500 even when the CDN is healthy.
+        probes = [
+            "/api/StaticData/GetTime",
+            "/api/Instrument/GetInstrumentSearch/%D9%81%D9%88%D9%84%D8%A7%D8%AF",
+            f"/api/Instrument/GetInstrumentInfo/{probe_ins_code}",
+            f"/api/ClosingPrice/GetClosingPriceInfo/{probe_ins_code}",
+        ]
+
         if dns_ok:
-            path = f"/api/ClosingPrice/GetClosingPriceInfo/{probe_ins_code}"
-            url = f"{self.base_url}{path}"
-            t0 = time.perf_counter()
-            try:
-                response = self._client.get(path)
-                api_latency_ms = (time.perf_counter() - t0) * 1000.0
-                api_status = response.status_code
-                https_ok = True
-                if response.status_code == 200:
-                    try:
-                        payload = response.json()
-                        api_ok = isinstance(payload, dict) and (
-                            "closingPriceInfo" in payload or len(payload) > 0
-                        )
-                        if not api_ok:
-                            api_error = "JSON parsed but unexpected shape"
-                    except ValueError as exc:
-                        api_error = f"Non-JSON body: {exc}"
-                else:
-                    api_error = f"HTTP {response.status_code}"
-            except httpx.TimeoutException as exc:
-                https_error = f"Timeout: {exc}"
-                api_error = https_error
-            except httpx.HTTPError as exc:
-                https_error = str(exc)
-                api_error = https_error
+            last_err: str | None = None
+            for path in probes:
+                t0 = time.perf_counter()
+                try:
+                    response = self._client.get(path)
+                    latency = (time.perf_counter() - t0) * 1000.0
+                    https_ok = True
+                    api_status = response.status_code
+                    api_latency_ms = latency
+                    if response.status_code == 200:
+                        try:
+                            payload = response.json()
+                            if isinstance(payload, dict) and payload:
+                                api_ok = True
+                                api_error = None
+                                logger.info(
+                                    "Health probe OK: %s (%.0f ms)",
+                                    path,
+                                    latency,
+                                )
+                                break
+                            last_err = f"{path}: empty JSON"
+                        except ValueError as exc:
+                            last_err = f"{path}: non-JSON ({exc})"
+                    else:
+                        last_err = f"{path}: HTTP {response.status_code}"
+                        logger.warning("Health probe soft-fail: %s", last_err)
+                except httpx.TimeoutException as exc:
+                    https_error = f"Timeout: {exc}"
+                    last_err = https_error
+                except httpx.HTTPError as exc:
+                    https_error = str(exc)
+                    last_err = https_error
+            if not api_ok:
+                api_error = last_err or "All probes failed"
         else:
             https_error = "Skipped (DNS failed)"
             api_error = "Skipped (DNS failed)"

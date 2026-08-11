@@ -94,6 +94,9 @@ def run_batch_pipeline(
         len(skipped),
         execute,
     )
+    from market_hours import gold_market_status_message
+
+    logger.info("%s", gold_market_status_message())
 
     if not execute:
         logger.info("Batch execute=False — validation/skip plan only")

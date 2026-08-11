@@ -84,6 +84,15 @@ TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
 _FEATURES = _CFG.get("features") or {}
 USE_MOCK_DATA = bool(_FEATURES.get("use_mock_data", False))
 
+_MH = _CFG.get("market_hours") or {}
+MARKET_TIMEZONE = str(_MH.get("timezone", "Asia/Tehran"))
+MARKET_OPEN_WEEKDAYS: list[str] = list(
+    _MH.get("open_weekdays")
+    or ["saturday", "sunday", "monday", "tuesday", "wednesday"]
+)
+MARKET_OPEN_TIME = str(_MH.get("open_time", "11:45"))
+MARKET_CLOSE_TIME = str(_MH.get("close_time", "18:00"))
+
 _POC = _CFG.get("poc") or {}
 POC_SYMBOL = str(_POC.get("symbol", "آتش"))
 POC_TSE_ID = int(float(str(_POC.get("tse_id", "56987424987755400"))))

@@ -2,7 +2,7 @@
 
 Daily valuation pipeline for Iranian gold ETFs (Turquoise Asset Management).
 
-Reads funds from a BI Excel export, pulls market data from TSETMC (via `pytse_client` / `finpy_tse` with CDN fallback), calculates legal-volume × selected NAV, and renders an HTML report.
+Reads funds from a BI Excel export, pulls market data from TSETMC (via `pytse_client` / `finpy_tse` with CDN fallback), calculates **legal buy volume × selected NAV**, and renders a Turquoise-branded HTML report with two sorted tables plus an error summary.
 
 ## Project layout
 
@@ -18,10 +18,11 @@ gold_cursor/
 ├── report/
 │   └── template.html       # Jinja2 HTML (Turquoise IDM styling)
 ├── src/
-│   ├── main.py             # CLI implementation
+│   ├── main.py
 │   ├── bi_loader.py
 │   ├── tsetmc_client.py
 │   ├── tsetmc_libs.py
+│   ├── market_hours.py     # Tehran gold-session calendar
 │   ├── fund_calculator.py
 │   ├── batch.py
 │   └── report_generator.py
@@ -38,9 +39,9 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-### Iran proxy (required with Cursor VPN)
+### Iran proxy (when Cursor VPN blocks TSETMC)
 
-Cursor’s VPN typically blocks TSETMC. Set an **Iran-exit** proxy in `.env`:
+Set an **Iran-exit** proxy in `.env`:
 
 ```env
 TSETMC_PROXY=http://user:pass@host:port
@@ -48,7 +49,7 @@ TSETMC_PROXY=http://user:pass@host:port
 TSETMC_PROXY=socks5://127.0.0.1:1080
 ```
 
-`config.yaml` reads this via `${TSETMC_PROXY}`. Leave empty only when your machine can reach `cdn.tsetmc.com` directly.
+`config.yaml` reads this via `${TSETMC_PROXY}`. Leave empty when your machine can reach `cdn.tsetmc.com` / `old.tsetmc.com` directly.
 
 ## Commands
 
@@ -68,7 +69,7 @@ python main.py --all
 
 ## Configuration
 
-Edit `config.yaml` for paths, timeouts, retries, provider, mock data, and validation rules. Secrets / proxies stay in environment variables (see `.env.example`).
+Edit `config.yaml` for paths, timeouts, retries, provider, mock data, validation, and **market hours**. Secrets / proxies stay in environment variables (see `.env.example`).
 
 Important keys:
 
@@ -76,15 +77,40 @@ Important keys:
 - `api.proxy`: `${TSETMC_PROXY}`
 - `features.use_mock_data`: offline calculation without TSETMC
 - `batch.enabled`: allow `--all`
+- `market_hours`: gold ETF session (default Sat–Wed **11:45–18:00** `Asia/Tehran`)
 
 ## Valuation rules
 
-- Legal volume = `buy_N_Volume` (log sell if different)
-- If last price ≤ NAV redemption → **Redemption** (use redemption NAV)
-- Else → **Issue/Redemption** (use issue NAV)
-- Market instrument resolved as `{symbol}2` / `{symbol}۲` with validation
-- Mock market TseIds are forbidden in live mode
-- One fund failure never aborts the batch; errors appear in the HTML Error Summary
+All fields come from the **retail board** of the instrument (بازار = **خرده فروشی**), e.g. `آتش` — **not** from `{symbol}2` / بازارگردان.
+
+| Field | Source |
+|--------|--------|
+| Last trade price | Retail board last price |
+| NAV redemption | ETF `pRedTran` |
+| NAV issue/redemption | ETF `pSubTran` |
+| Legal volume | Retail حقیقی/حقوقی → **`buy_N_Volume`** |
+
+Business logic:
+
+1. **Legal volume** = `buy_N_Volume`. If buy ≠ sell, still use buy; log sell and add a warning.
+2. **Category**
+   - If `last_price <= nav_redemption` → **Redemption** → selected price = redemption NAV
+   - Else → **Issue/Redemption** → selected price = **issue/redemption NAV** (`pSubTran`)
+3. **Fund value** = `legal_buy_volume × selected_price`
+4. **insCode**: Excel `TseId` is often float64-corrupted. Resolve retail `insCode` via TSETMC search (prefer خرده فروشی); Excel is only a near-match hint.
+5. **Batch**: never abort on one fund failure; always write HTML with Error Summary. Skip NULL `TseId` rows and list them as errors.
+6. **Live mode**: forbid mock TseIds (`999…`, `888…`).
+7. **HTML**: column `Calculated Value (Rial)`; internal valuation footer. Tables: Redemption (ابطال‌ها) and Issue/Redemption (صدور/ابطال‌ها), sorted by value descending.
+
+### Gold market hours
+
+Gold funds trade **Saturday–Wednesday, 11:45–18:00 Tehran time**. Outside that window, live TSETMC boards often show zeros/blank fields. The pipeline logs session status and prefers **ClientType / price history** for the last session with data.
+
+## Data access
+
+- Prefer `pytse_client` / `finpy_tse`-style calls (`instinfofast`, `clienttype.aspx`, legacy `search.aspx`) with CDN httpx fallback
+- ETF dual NAV via CDN `GetETFByInsCode` when libs do not expose it cleanly
+- Do not invent prices, NAVs, or volumes when live/history data is missing — fail that fund and continue the batch
 
 ## Adding funds
 
