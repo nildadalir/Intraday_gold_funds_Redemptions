@@ -1,0 +1,33 @@
+---
+description: Standard Python project layout — config.yaml + main.py; keep runtime config out of code
+alwaysApply: true
+---
+
+# Project structure standard
+
+Every Python data/extract/reporting project in this workspace should follow the same shape:
+
+## Required root files
+
+- `config.yaml` — **all** runtime configuration (paths, API, retries, feature flags). Secrets use `${ENV_VAR}` only.
+- `main.py` — single CLI entrypoint (`python main.py ...`).
+- `config.py` — thin loader that reads `config.yaml` and expands `${ENV_VAR}`; no hardcoded business settings.
+- `requirements.txt`
+- `README.md`
+- `.env.example` (never commit real `.env`)
+
+## Do
+
+- Put new tunables in `config.yaml`, then expose them via `config.py`.
+- Keep implementation under `src/` (or `extract/`) and templates under `report/` / `templates/`.
+- Document commands and proxy/env setup in `README.md`.
+
+## Do not
+
+- Hardcode timeouts, URLs, paths, or feature flags in Python modules.
+- Commit secrets, proxies with credentials, or `.env`.
+- Invent alternate entrypoints without keeping `main.py` at the repo root.
+
+## Related skill
+
+When migrating legacy code into this layout, use the `extract-configs-to-yaml` skill before editing `config.yaml`.
