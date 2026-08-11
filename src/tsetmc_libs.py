@@ -76,13 +76,42 @@ class PreferredLibsClient(TsetmcClient):
             return super().get_last_trade_price(ins_code)
 
     def get_client_type(self, ins_code: int | str) -> ClientTypeVolumes:
+        """
+        Legal/individual volumes for the retail board.
+
+        Prefer CDN GetClientType — same payload the TSETMC instrument page
+        uses for حقیقی/حقوقی. pytse instinfofast can disagree (seen on gold
+        ETFs, e.g. آتش ~120k vs page ~240k); keep it only as fallback.
+        """
         from market_hours import gold_market_is_open, gold_market_status_message
 
         market_open = gold_market_is_open()
         if not market_open:
             logger.info("%s", gold_market_status_message())
 
-        # 1) Intraday board — only useful during the gold session
+        # 1) CDN live — matches retail-page Client Type table
+        try:
+            live = self._client_type_live(ins_code)
+            if live.buy_n_volume > 0:
+                logger.info(
+                    "client_type via CDN GetClientType for %s buy_N=%s sell_N=%s",
+                    ins_code,
+                    live.buy_n_volume,
+                    live.sell_n_volume,
+                )
+                return live
+            logger.warning(
+                "CDN GetClientType buy_N_Volume=0 for %s; trying fallbacks",
+                ins_code,
+            )
+        except Exception as exc:
+            logger.warning(
+                "CDN GetClientType failed for %s (%s); trying fallbacks",
+                ins_code,
+                exc,
+            )
+
+        # 2) Intraday instinfofast — only if market open and CDN empty/failed
         if market_open:
             try:
                 from pytse_client import tse_settings
@@ -107,8 +136,9 @@ class PreferredLibsClient(TsetmcClient):
                     raise TsetmcDataError("instinfofast corporate buy_vol is 0")
                 buy_i = float(indiv.buy_vol) if indiv is not None else 0.0
                 sell_i = float(indiv.sell_vol) if indiv is not None else 0.0
-                logger.info(
-                    "client_type via pytse instinfofast for %s buy_N=%s sell_N=%s",
+                logger.warning(
+                    "client_type via pytse instinfofast fallback for %s "
+                    "buy_N=%s sell_N=%s (CDN live was empty/unavailable)",
                     ins_code,
                     buy_n,
                     sell_n,
@@ -132,7 +162,7 @@ class PreferredLibsClient(TsetmcClient):
                 ins_code,
             )
 
-        # 2) Legacy clienttype.aspx history (pytse download path)
+        # 3) Legacy clienttype.aspx history
         try:
             from pytse_client import tse_settings
 
@@ -183,7 +213,7 @@ class PreferredLibsClient(TsetmcClient):
             raise TsetmcDataError("clienttype.aspx had no buy_N>0 rows")
         except Exception as exc:
             logger.warning(
-                "pytse clienttype.aspx failed for %s (%s); CDN fallback",
+                "pytse clienttype.aspx failed for %s (%s); CDN history fallback",
                 ins_code,
                 exc,
             )

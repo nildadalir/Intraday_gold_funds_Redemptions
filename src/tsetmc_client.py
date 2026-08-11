@@ -197,10 +197,6 @@ class TsetmcClient:
                 logger.warning(
                     "last_price %s failed for %s: %s", name, ins_code, exc
                 )
-                if config.FAIL_FAST_ON_TIMEOUT and isinstance(
-                    exc, TsetmcNetworkError
-                ):
-                    break
         raise TsetmcDataError(
             f"Could not get last price for {ins_code}; tried: "
             + " | ".join(errors)

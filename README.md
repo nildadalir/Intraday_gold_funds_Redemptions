@@ -132,7 +132,8 @@ Gold funds trade **Saturday–Wednesday, 12:00–18:00 Tehran time**. Outside th
 
 ## Data access
 
-- Prefer `pytse_client` calls (`instinfofast`, `clienttype.aspx`, CDN search) with CDN httpx fallback
+- Prefer CDN `GetClientType` for legal volume (same as the TSETMC retail Client Type table); pytse `instinfofast` only as fallback
+- Prefer `pytse_client` for last price / history search with CDN httpx fallback
 - ETF dual NAV via CDN `GetETFByInsCode`
 - Do not invent prices, NAVs, or volumes when live/history data is missing — fail that fund and continue the batch
 
