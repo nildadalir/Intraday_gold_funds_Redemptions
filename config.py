@@ -55,11 +55,10 @@ def _path(key: str, default: str) -> Path:
 
 
 DATA_DIR = PROJECT_ROOT / "data"
-RAW_DIR = _path("raw_dir", "data/raw")
 OUTPUT_DIR = _path("output_dir", "output")
 LOG_DIR = _path("log_dir", "logs")
 REPORT_DIR = _path("report_dir", "report")
-EXCEL_PATH = _path("excel", "excel/طلا.xlsx")
+EXCEL_PATH = _path("excel", "data/طلا.xlsx")
 TEMPLATE_PATH = _path("report_template", "report/template.html")
 
 _BATCH = _CFG.get("batch") or {}
@@ -80,7 +79,6 @@ _RETRY = _API.get("retry") or {}
 TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))
 TSETMC_RETRY_WAIT_SECONDS = float(_RETRY.get("backoff_seconds", 1))
 TSETMC_PROXY: str | None = _API.get("proxy")
-SAVE_RAW_RESPONSES = bool(_API.get("save_raw_responses", False))
 TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
 
 _POC = _CFG.get("poc") or {}

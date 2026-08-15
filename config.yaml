@@ -2,12 +2,11 @@
 # Secrets use ${ENV_VAR} only (never commit real secrets).
 
 paths:
-  excel: "excel/طلا.xlsx"
+  excel: "data/طلا.xlsx"
   report_template: "report/template.html"
   report_dir: "report"
   output_dir: "output"
   log_dir: "logs"
-  raw_dir: "data/raw"
 
 batch:
   max_workers: 1
@@ -27,7 +26,6 @@ api:
   retry:
     max_attempts: 2
     backoff_seconds: 1
-  save_raw_responses: false
   headers:
     User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     Accept: "application/json, text/plain, */*"

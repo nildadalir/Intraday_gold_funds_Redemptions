@@ -7,8 +7,6 @@ __pycache__/
 .ruff_cache/
 output/
 logs/
-data/raw/*.json
-!data/raw/.gitkeep
 *.log
 .env
 .DS_Store
