@@ -59,7 +59,7 @@ RAW_DIR = _path("raw_dir", "data/raw")
 OUTPUT_DIR = _path("output_dir", "output")
 LOG_DIR = _path("log_dir", "logs")
 REPORT_DIR = _path("report_dir", "report")
-EXCEL_PATH = _path("excel", "data/طلا.xlsx")
+EXCEL_PATH = _path("excel", "excel/طلا.xlsx")
 TEMPLATE_PATH = _path("report_template", "report/template.html")
 
 _BATCH = _CFG.get("batch") or {}

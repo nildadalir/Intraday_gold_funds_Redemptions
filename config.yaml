@@ -2,7 +2,7 @@
 # Secrets use ${ENV_VAR} only (never commit real secrets).
 
 paths:
-  excel: "data/طلا.xlsx"
+  excel: "excel/طلا.xlsx"
   report_template: "report/template.html"
   report_dir: "report"
   output_dir: "output"

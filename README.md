@@ -16,7 +16,7 @@ intra_day_gold_redemptions/
 ├── config.py
 ├── requirements.txt
 ├── .env.example
-├── data/طلا.xlsx
+├── excel/طلا.xlsx
 ├── report/template.html
 ├── src/
 │   ├── excel_reader.py
