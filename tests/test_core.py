@@ -1,11 +1,9 @@
-"""Unit tests for core valuation helpers (no live TSETMC)."""
+"""Unit tests for Excel → AssetId mapping and classification (no live TSETMC)."""
 
 from __future__ import annotations
 
 import sys
-from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -15,150 +13,66 @@ for path in (str(ROOT), str(SRC)):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from bi_loader import (  # noqa: E402
-    is_board_variant_instrument,
-    is_primary_fund_row,
-    parse_tse_id,
+from calculator import classify  # noqa: E402
+from excel_reader import parse_tse_id  # noqa: E402
+from fund_mapper import (  # noqa: E402
+    FundPair,
+    get_fund_by_asset_id,
+    group_funds,
+    is_main_board,
+    is_market_board,
 )
-from fund_calculator import classify_category, calculate_fund_value  # noqa: E402
-from history_store import value_change_pct  # noqa: E402
-from market_hours import gold_market_is_open  # noqa: E402
+from excel_reader import InstrumentRow  # noqa: E402
 
 
-class TestBiLoader:
-    def test_parse_tse_id_scientific(self) -> None:
-        assert parse_tse_id(5.69874249877554e16) == 56987424987755400
+class TestParseTseId:
+    def test_string_full_precision(self) -> None:
+        assert parse_tse_id("56987424987755487") == "56987424987755487"
 
-    def test_parse_tse_id_nullish(self) -> None:
+    def test_null(self) -> None:
         assert parse_tse_id(None) is None
         assert parse_tse_id("NULL") is None
 
-    def test_board_variants(self) -> None:
-        assert is_board_variant_instrument("آتش2")
-        assert is_board_variant_instrument("طلا3")
-        assert is_board_variant_instrument("زر4")
-        assert not is_board_variant_instrument("آتش")
-        assert not is_board_variant_instrument("رز ترنج")
 
-    def test_primary_main_market(self) -> None:
-        assert is_primary_fund_row("آتش", "بازار معاملات اصلی")
-        assert not is_primary_fund_row("آتش2", "بازار معاملات آد-لات")
-        assert not is_primary_fund_row("آتش", "بازار معاملات بلوکی")
+class TestBoardRules:
+    def test_main_and_market(self) -> None:
+        main = InstrumentRow(
+            "69664", "آتش", "30018", "asset", "56987424987755487",
+            market="بازار معاملات اصلی",
+        )
+        mkt = InstrumentRow(
+            "69662", "آتش2", "30018", "asset", "32651481214999246",
+            market="بازار معاملات آد-لات",
+        )
+        assert is_main_board(main)
+        assert not is_market_board(main)
+        assert is_market_board(mkt)
+        assert not is_main_board(mkt)
 
 
 class TestClassify:
-    def test_redemption(self) -> None:
-        cat, key = classify_category(100.0, 105.0)
+    def test_redemption_le(self) -> None:
+        cat, key = classify(100.0, 100.0)
         assert cat == "Redemption"
-        assert key == "redemption"
+        assert key == "nav_redemption"
+        cat, key = classify(99.0, 100.0)
+        assert cat == "Redemption"
 
-    def test_issue_redemption(self) -> None:
-        cat, key = classify_category(110.0, 105.0)
+    def test_issue(self) -> None:
+        cat, key = classify(101.0, 100.0)
         assert cat == "Issue/Redemption"
-        assert key == "issue"
-
-    def test_value(self) -> None:
-        assert calculate_fund_value(1000, 2.5) == 2500.0
+        assert key == "nav_issue"
 
 
-class TestMarketHours:
-    def test_open_wednesday_noon(self) -> None:
-        # Fixed Wednesday 2026-08-12 12:30 Tehran
-        now = datetime(2026, 8, 12, 12, 30, tzinfo=ZoneInfo("Asia/Tehran"))
-        assert gold_market_is_open(now) is True
+class TestExcelMapping:
+    def test_atash_group(self) -> None:
+        fund = get_fund_by_asset_id("30018")
+        assert fund.main.instrument == "آتش"
+        assert fund.main.tse_id == "56987424987755487"
+        assert fund.market.instrument == "آتش2"
+        assert fund.market.tse_id == "32651481214999246"
 
-    def test_closed_before_open(self) -> None:
-        now = datetime(2026, 8, 12, 11, 30, tzinfo=ZoneInfo("Asia/Tehran"))
-        assert gold_market_is_open(now) is False
-
-    def test_closed_friday(self) -> None:
-        now = datetime(2026, 8, 14, 13, 0, tzinfo=ZoneInfo("Asia/Tehran"))
-        assert gold_market_is_open(now) is False
-
-
-class TestBoardPick:
-    def test_pick_main_vs_retail(self) -> None:
-        from fund_calculator import _pick_from_hits
-        from tsetmc_client import SearchHit
-
-        hits = [
-            SearchHit(
-                ins_code="111",
-                symbol="آتش",
-                name="main",
-                flow=1,
-                flow_title="",
-                market_title="بازار معاملات اصلی",
-                last_date=20260811,
-                is_active=True,
-            ),
-            SearchHit(
-                ins_code="222",
-                symbol="آتش",
-                name="retail",
-                flow=3,
-                flow_title="خرده فروشی",
-                market_title="خرده فروشی",
-                last_date=20260811,
-                is_active=True,
-            ),
-        ]
-        assert _pick_from_hits(hits, fund_symbol="آتش", board="main") == "111"
-        assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") == "222"
-
-    def test_retail_by_flow(self) -> None:
-        from fund_calculator import _pick_from_hits
-        from tsetmc_client import SearchHit
-
-        hits = [
-            SearchHit(
-                ins_code="111",
-                symbol="آتش",
-                name="main",
-                flow=1,
-                flow_title="",
-                market_title="بازار معاملات اصلی",
-                last_date=20260811,
-                is_active=True,
-            ),
-            SearchHit(
-                ins_code="222",
-                symbol="آتش",
-                name="gold etf",
-                flow=7,
-                flow_title="",
-                market_title="صندوق های کالایی",
-                last_date=20260811,
-                is_active=True,
-            ),
-        ]
-        assert _pick_from_hits(hits, fund_symbol="آتش", board="retail") == "222"
-
-    def test_retail_sole_exact_fallback(self) -> None:
-        from fund_calculator import _pick_from_hits
-        from tsetmc_client import SearchHit
-
-        hits = [
-            SearchHit(
-                ins_code="56987424987755487",
-                symbol="آتش",
-                name="صندوق",
-                flow=7,
-                flow_title="",
-                market_title="صندوق های کالایی",
-                last_date=20260811,
-                is_active=True,
-            ),
-        ]
-        assert (
-            _pick_from_hits(hits, fund_symbol="آتش", board="retail")
-            == "56987424987755487"
-        )
-
-
-class TestHistory:
-    def test_change_pct(self) -> None:
-        assert value_change_pct(110, 100) == pytest.approx(10.0)
-        assert value_change_pct(90, 100) == pytest.approx(-10.0)
-        assert value_change_pct(100, None) is None
-        assert value_change_pct(100, 0) is None
+    def test_zar_market_tseid_full(self) -> None:
+        funds, _ = group_funds()
+        zar = next(f for f in funds if f.main.instrument == "زر")
+        assert zar.market.tse_id == "65413691615306869"

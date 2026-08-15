@@ -56,21 +56,14 @@ def _path(key: str, default: str) -> Path:
 
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = _path("raw_dir", "data/raw")
-DEBUG_DIR = _path("debug_dir", "data/debug")
-HISTORY_DIR = _path("history_dir", "data/history")
 OUTPUT_DIR = _path("output_dir", "output")
 LOG_DIR = _path("log_dir", "logs")
 REPORT_DIR = _path("report_dir", "report")
 EXCEL_PATH = _path("excel", "data/طلا.xlsx")
 TEMPLATE_PATH = _path("report_template", "report/template.html")
-REPORT_TEMPLATE_NAME = Path(
-    (_CFG.get("paths") or {}).get("report_template", "report/template.html")
-).name
 
 _BATCH = _CFG.get("batch") or {}
-BATCH_ENABLED = bool(_BATCH.get("enabled", True))
-BATCH_MAX_WORKERS = max(1, int(_BATCH.get("max_workers", 4)))
-BATCH_REQUIRE_OPEN_MARKET = bool(_BATCH.get("require_open_market", False))
+BATCH_MAX_WORKERS = max(1, int(_BATCH.get("max_workers", 1)))
 
 _LOG = _CFG.get("logging") or {}
 LOG_MAX_BYTES = int(_LOG.get("max_bytes", 1_048_576))
@@ -82,7 +75,6 @@ TSETMC_BASE_URL = str(_API.get("base_url", "https://cdn.tsetmc.com"))
 TSETMC_TIMEOUT_SECONDS = float(_API.get("timeout_seconds", 15))
 TSETMC_CONNECT_TIMEOUT_SECONDS = float(_API.get("connect_timeout_seconds", 8))
 TSETMC_LIB_TIMEOUT_SECONDS = float(_API.get("lib_timeout_seconds", 8))
-SEARCH_LEGACY_FALLBACK = bool(_API.get("search_legacy_fallback", True))
 FAIL_FAST_ON_TIMEOUT = bool(_API.get("fail_fast_on_timeout", True))
 _RETRY = _API.get("retry") or {}
 TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))
@@ -91,36 +83,13 @@ TSETMC_PROXY: str | None = _API.get("proxy")
 SAVE_RAW_RESPONSES = bool(_API.get("save_raw_responses", False))
 TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
 
-_FEATURES = _CFG.get("features") or {}
-USE_MOCK_DATA = bool(_FEATURES.get("use_mock_data", False))
-
-_MH = _CFG.get("market_hours") or {}
-MARKET_TIMEZONE = str(_MH.get("timezone", "Asia/Tehran"))
-MARKET_OPEN_WEEKDAYS: list[str] = list(
-    _MH.get("open_weekdays")
-    or ["saturday", "sunday", "monday", "tuesday", "wednesday"]
-)
-MARKET_OPEN_TIME = str(_MH.get("open_time", "12:00"))
-MARKET_CLOSE_TIME = str(_MH.get("close_time", "18:00"))
-
 _POC = _CFG.get("poc") or {}
-POC_SYMBOL = str(_POC.get("symbol", "آتش"))
-POC_TSE_ID = int(float(str(_POC.get("tse_id", "56987424987755400"))))
-
-_MOCK = (_CFG.get("mock") or {}).get("atash") or {}
-MOCK_ATASH = dict(_MOCK)
-
-_VALIDATION = _CFG.get("validation") or {}
-FORBIDDEN_MOCK_MARKET_TSE_IDS = frozenset(
-    str(x) for x in (_VALIDATION.get("forbidden_mock_market_tse_ids") or [])
-)
-
-SYMBOL_SLUGS: dict[str, str] = dict(
-    ((_CFG.get("symbols") or {}).get("slugs") or {})
-)
+POC_ASSET_ID = str(_POC.get("asset_id", "30018"))
+POC_INSTRUMENT = str(_POC.get("instrument", "آتش"))
+POC_MAIN_TSE_ID = str(_POC.get("main_tse_id", "56987424987755487"))
+POC_MARKET_TSE_ID = str(_POC.get("market_tse_id", "32651481214999246"))
 
 
 def reload() -> None:
-    """Reload config.yaml (mainly for tests)."""
     global _CFG
     _CFG = _load_yaml()

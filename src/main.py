@@ -1,11 +1,9 @@
-"""Gold fund valuation CLI.
+"""
+Intra-Day Gold Redemptions — CLI
 
-Examples:
-  python main.py --symbol آتش
-  python main.py --mock-report
-  python main.py --health-check
-  python main.py --all
-  python main.py --all --require-open-market
+  python main.py              # batch all AssetIds
+  python main.py --poc        # Proof of Concept: آتش only
+  python main.py --asset-id 30018
 """
 
 from __future__ import annotations
@@ -16,233 +14,106 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-SRC = Path(__file__).resolve().parent
-for path in (str(ROOT), str(SRC)):
-    if path not in sys.path:
-        sys.path.insert(0, path)
+ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
-import config
-from batch import run_batch_pipeline
-from bi_loader import (
-    BiLoadError,
-    BiValidationError,
-    get_fund_by_symbol,
-    validate_for_processing,
-)
-from fund_calculator import value_fund_record
-from market_hours import gold_market_is_open, gold_market_status_message
-from report_generator import (
-    format_poc_output,
-    generate_mock_html_report,
-    save_debug_json,
-    save_poc_snapshot,
-)
-from tsetmc_client import (
-    HealthCheckResult,
-    TsetmcError,
-    create_client,
-    symbol_slug,
-)
+import config  # noqa: E402
+from calculator import ErrorRecord, value_fund  # noqa: E402
+from fund_mapper import get_fund_by_asset_id, get_fund_by_main_instrument  # noqa: E402
+from pipeline import run_batch  # noqa: E402
+from report_generator import render_html_report  # noqa: E402
+from tsetmc_client import create_client  # noqa: E402
 
 
-def setup_logging(name: str = "run") -> None:
+def _setup_logging() -> None:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = config.LOG_DIR / f"{name}.log"
-    file_handler = RotatingFileHandler(
-        log_path,
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(fmt)
+    root.handlers.clear()
+    root.addHandler(sh)
+    fh = RotatingFileHandler(
+        config.LOG_DIR / "intra_day_gold_redemptions.log",
         maxBytes=config.LOG_MAX_BYTES,
         backupCount=config.LOG_BACKUP_COUNT,
         encoding="utf-8",
     )
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            file_handler,
-        ],
-        force=True,
-    )
+    fh.setFormatter(fmt)
+    root.addHandler(fh)
 
 
-def run_symbol(symbol: str) -> int:
-    setup_logging(f"symbol_{symbol_slug(symbol)}")
-    logger = logging.getLogger("main")
-
-    try:
-        record = get_fund_by_symbol(symbol)
-        validate_for_processing(record)
-    except (BiLoadError, BiValidationError) as exc:
-        logger.error("BI lookup failed: %s", exc)
-        print("\n=== FAILED ===")
-        print(exc)
-        return 1
-
-    logger.info(
-        "Valuing %s (TseId=%s, mock=%s, proxy=%s)",
-        record.instrument,
-        record.tse_id,
-        config.USE_MOCK_DATA,
-        bool(config.TSETMC_PROXY),
-    )
-    logger.info("%s", gold_market_status_message())
-    try:
-        with create_client() as client:
-            client.raw_label = symbol_slug(symbol)
-            result = value_fund_record(client, record)
-    except TsetmcError as exc:
-        logger.error("Valuation failed: %s", exc)
-        print("\n=== FAILED ===")
-        print(exc)
-        return 1
-
-    output = format_poc_output(result)
-    snapshot = save_poc_snapshot(result, config.OUTPUT_DIR)
-    debug_path = save_debug_json(result)
-    print("\n=== RESULT ===")
-    print(output)
-    print(f"\nSaved text: {snapshot}")
-    print(f"Saved debug JSON: {debug_path}")
-    return 0
-
-
-def run_mock_report() -> int:
-    setup_logging("mock_report")
-    logger = logging.getLogger("main")
-    path = generate_mock_html_report()
-    logger.info("Mock HTML report ready: %s", path)
-    print(f"\nMock report written: {path}")
-    return 0
-
-
-def run_health_check() -> int:
-    setup_logging("health_check")
-    logger = logging.getLogger("main")
-    logger.info(
-        "Running TSETMC health check (mock=%s, proxy=%s)",
-        config.USE_MOCK_DATA,
-        bool(config.TSETMC_PROXY),
-    )
-    with create_client() as client:
-        result = client.health_check()
-    _print_health(result)
-    if result.suggest_proxy:
-        return 1
-    return 0 if result.ok else 1
-
-
-def _print_health(result: HealthCheckResult) -> None:
-    print("\n=== TSETMC HEALTH CHECK ===")
-    print(f"Proxy configured: {result.proxy_configured}")
-    print(f"DNS: {'OK' if result.dns_ok else 'FAIL'}")
-    if result.dns_ips:
-        print(f"  IPs: {', '.join(result.dns_ips)}")
-    if result.dns_error:
-        print(f"  Error: {result.dns_error}")
-    print(f"HTTPS: {'OK' if result.https_ok else 'FAIL'}")
-    if result.https_error:
-        print(f"  Error: {result.https_error}")
-    print(f"API: {'OK' if result.api_ok else 'FAIL'}")
-    if result.api_status_code is not None:
-        print(f"  Status: {result.api_status_code}")
-    if result.api_latency_ms is not None:
-        print(f"  Latency: {result.api_latency_ms:.0f} ms")
-    if result.api_error:
-        print(f"  Error: {result.api_error}")
-    print(f"Overall: {'PASS' if result.ok else 'FAIL'}")
-    if result.suggest_proxy:
-        print(
-            "\nHint: TSETMC looks unreachable (timeout/connect). "
-            "If Cursor VPN blocks Iranian hosts, set an Iran-exit proxy:\n"
-            "  TSETMC_PROXY=http://user:pass@host:port\n"
-            "  # or socks5://127.0.0.1:1080\n"
-            "Then re-run: python main.py --health-check"
-        )
-
-
-def run_all(*, require_open_market: bool = False, force: bool = False) -> int:
-    setup_logging("batch")
-    logger = logging.getLogger("main")
-    if not config.BATCH_ENABLED:
-        print("BATCH_ENABLED is False — refusing to run --all")
-        return 2
-
-    must_be_open = require_open_market or config.BATCH_REQUIRE_OPEN_MARKET
-    if must_be_open and not force and not gold_market_is_open():
-        msg = gold_market_status_message()
-        logger.error("Refusing --all while market closed: %s", msg)
-        print(f"\nMarket closed — batch skipped.\n{msg}")
-        print("Re-run after session open, or pass --force to override.")
-        return 3
-
-    logger.info("Starting batch (--all), provider=%s", config.TSETMC_PROVIDER)
-    logger.info("%s", gold_market_status_message())
-    summary = run_batch_pipeline(execute=True)
-    print(
-        f"\nBatch complete: ok={summary.ok_count} "
-        f"skipped_null={summary.skip_count} errors={summary.error_count}"
-    )
-    if summary.report_path:
-        print(f"Report: {summary.report_path}")
-    for err in summary.errors:
-        print(f"  ERROR {err.fund_name} ({err.tse_id}): {err.reason}")
-    # Always succeed exit if report was written; partial failures are in HTML.
-    return 0 if summary.report_path else 1
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Gold fund valuation report generator"
-    )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument(
-        "--symbol",
-        metavar="SYMBOL",
-        help="Value a single fund symbol (e.g. آتش)",
-    )
-    group.add_argument(
-        "--mock-report",
-        action="store_true",
-        help="Render mock HTML report for template review",
-    )
-    group.add_argument(
-        "--health-check",
-        action="store_true",
-        help="Test DNS, HTTPS, and TSETMC API latency",
-    )
-    group.add_argument(
-        "--all",
-        action="store_true",
-        help="Process all funds (gated by config.BATCH_ENABLED)",
-    )
-    parser.add_argument(
-        "--require-open-market",
-        action="store_true",
-        help="With --all: exit if gold session is closed (Sat–Wed 12:00–18:00 Tehran)",
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="With --all: ignore require-open-market / config gate",
-    )
-    return parser
+def _print_poc(result) -> None:
+    print()
+    print("=== PoC RESULT ===")
+    print(f"Asset:              {result.asset}")
+    print(f"AssetId:            {result.asset_id}")
+    print(f"Main Instrument:    {result.instrument}")
+    print(f"Main TseId:         {result.main_tse_id}")
+    print(f"Last Trade:         {result.last_trade_price}")
+    print(f"NAV Redemption:     {result.nav_redemption}")
+    print(f"NAV Issue:          {result.nav_issue}")
+    print(f"Market Instrument:  {result.market_instrument}")
+    print(f"Market TseId:       {result.market_tse_id}")
+    print(f"Legal Volume:       {result.legal_buy_volume}")
+    print(f"Category:           {result.category}")
+    print(f"Selected Price:     {result.selected_price}")
+    print(f"Calculated Value:   {result.calculated_value}")
+    for w in result.warnings:
+        print(f"Warning:            {w}")
+    print("==================")
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
+    parser = argparse.ArgumentParser(description="Intra-Day Gold Redemptions")
+    parser.add_argument(
+        "--poc",
+        action="store_true",
+        help=f"Proof of Concept for {config.POC_INSTRUMENT} only",
+    )
+    parser.add_argument("--asset-id", help="Process a single AssetId")
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Process all AssetIds (default when no flag)",
+    )
     args = parser.parse_args(argv)
-    if args.health_check:
-        return run_health_check()
-    if args.mock_report:
-        return run_mock_report()
-    if args.all:
-        return run_all(
-            require_open_market=args.require_open_market,
-            force=args.force,
-        )
-    return run_symbol(args.symbol)
+    _setup_logging()
+    log = logging.getLogger("main")
+
+    if args.poc or args.asset_id:
+        asset_id = args.asset_id or config.POC_ASSET_ID
+        log.info("PoC / single fund AssetId=%s", asset_id)
+        try:
+            fund = get_fund_by_asset_id(asset_id)
+        except LookupError:
+            fund = get_fund_by_main_instrument(config.POC_INSTRUMENT)
+        with create_client() as client:
+            try:
+                result = value_fund(client, fund)
+            except Exception as exc:
+                log.error("PoC failed: %s", exc)
+                print(f"\n=== FAILED ===\n{exc}")
+                return 1
+        _print_poc(result)
+        path = render_html_report([result], [])
+        print(f"Report: {path}")
+        return 0
+
+    log.info("Starting batch (all AssetIds), provider=%s", config.TSETMC_PROVIDER)
+    summary = run_batch()
+    print(
+        f"\nBatch complete: ok={summary.ok_count} errors={summary.error_count}"
+    )
+    print(f"Report: {summary.report_path}")
+    for err in summary.errors:
+        print(f"  ERROR {err.fund_name} ({err.tse_id}): {err.reason}")
+    return 0 if summary.ok_count else 1
 
 
 if __name__ == "__main__":

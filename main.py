@@ -1,10 +1,9 @@
-# Gold Fund Valuation — CLI entrypoint
+# Intra-Day Gold Redemptions — CLI entrypoint
 #
 # Usage:
-#   python main.py --health-check
-#   python main.py --symbol آتش
-#   python main.py --mock-report
-#   python main.py --all
+#   python main.py --poc
+#   python main.py --asset-id 30018
+#   python main.py
 
 from __future__ import annotations
 
@@ -14,7 +13,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SRC_MAIN = ROOT / "src" / "main.py"
-
 
 if __name__ == "__main__":
     if not SRC_MAIN.exists():

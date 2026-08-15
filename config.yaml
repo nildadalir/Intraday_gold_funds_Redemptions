@@ -1,5 +1,5 @@
-# Gold Fund Valuation Report — configuration
-# Secrets and machine-specific values use ${ENV_VAR} (never commit real secrets).
+# Intra-Day Gold Redemptions — configuration
+# Secrets use ${ENV_VAR} only (never commit real secrets).
 
 paths:
   excel: "data/طلا.xlsx"
@@ -8,39 +8,25 @@ paths:
   output_dir: "output"
   log_dir: "logs"
   raw_dir: "data/raw"
-  debug_dir: "data/debug"
-  history_dir: "data/history"
 
 batch:
-  enabled: true
-  # Parallel fund workers (each owns its own HTTP client). 1 = sequential.
-  max_workers: 4
-  # If true, --all exits when gold session is closed (unless --force).
-  require_open_market: false
+  max_workers: 1
 
 logging:
   max_bytes: 1048576
   backup_count: 5
 
 api:
-  # preferred = pytse_client URLs + CDN httpx (ETF NAV / fallbacks)
-  # cdn      = direct cdn.tsetmc.com httpx only
   provider: "preferred"
   base_url: "https://cdn.tsetmc.com"
-  # Iran-exit HTTP(S)/SOCKS proxy — required when Cursor VPN blocks TSETMC.
-  # Example: http://user:pass@host:port  or  socks5://127.0.0.1:1080
   proxy: ${TSETMC_PROXY}
   timeout_seconds: 15
   connect_timeout_seconds: 8
   lib_timeout_seconds: 8
-  # Call legacy search.aspx only when CDN has no exact symbol hit.
-  search_legacy_fallback: true
-  # Stop cascading alternate endpoints after the first network timeout.
   fail_fast_on_timeout: true
   retry:
     max_attempts: 2
     backoff_seconds: 1
-  # Raw JSON dumps are slow on batch runs; enable only when debugging.
   save_raw_responses: false
   headers:
     User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -49,45 +35,8 @@ api:
     Referer: "https://www.tsetmc.com/"
     Origin: "https://www.tsetmc.com"
 
-features:
-  use_mock_data: false
-
-# Gold ETF session (IME / commodity funds) — Tehran local time.
-# Outside this window live ClientType / boards are often zero or blank.
-market_hours:
-  timezone: "Asia/Tehran"
-  open_weekdays:
-    - saturday
-    - sunday
-    - monday
-    - tuesday
-    - wednesday
-  open_time: "12:00"
-  close_time: "18:00"
-
 poc:
-  symbol: "آتش"
-  tse_id: "56987424987755487"
-
-mock:
-  atash:
-    symbol: "آتش"
-    # MAIN board (price / NAV) — matches BI Excel TseId
-    tse_id: "56987424987755487"
-    last_price: 33201
-    nav_redemption: 33277
-    nav_issue_redemption: null
-    market_symbol: "آتش"
-    # RETAIL board (خرده فروشی) — legal volume only (distinct insCode)
-    market_tse_id: "56987424987755999"
-    legal_buy_volume: 18485000
-    legal_sell_volume: 16362000
-
-validation:
-  forbidden_mock_market_tse_ids:
-    - "99999999999999999"
-    - "88888888888888888"
-
-symbols:
-  slugs:
-    آتش: "atash"
+  asset_id: "30018"
+  instrument: "آتش"
+  main_tse_id: "56987424987755487"
+  market_tse_id: "32651481214999246"
