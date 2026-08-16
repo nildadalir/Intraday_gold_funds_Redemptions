@@ -81,12 +81,6 @@ TSETMC_RETRY_WAIT_SECONDS = float(_RETRY.get("backoff_seconds", 1))
 TSETMC_PROXY: str | None = _API.get("proxy")
 TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
 
-_POC = _CFG.get("poc") or {}
-POC_ASSET_ID = str(_POC.get("asset_id", "30018"))
-POC_INSTRUMENT = str(_POC.get("instrument", "آتش"))
-POC_MAIN_TSE_ID = str(_POC.get("main_tse_id", "56987424987755487"))
-POC_MARKET_TSE_ID = str(_POC.get("market_tse_id", "32651481214999246"))
-
 
 def reload() -> None:
     global _CFG

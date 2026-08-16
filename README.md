@@ -5,7 +5,7 @@ GitLab: `intra_day_gold_redemptions`
 Daily intraday gold-fund redemption valuation for Turquoise Asset Management.
 
 Groups BI Excel rows by **AssetId**, uses the **main** board for last price + NAV,
-and the **\*2 / آد-لات** board for live legal (حقوقی) buy volume.
+and the **\*2 / آد-لات** board for live institutional (حقوقی) buy volume.
 
 ## Layout
 
@@ -15,7 +15,6 @@ intra_day_gold_redemptions/
 ├── config.yaml
 ├── config.py
 ├── requirements.txt
-├── .env.example
 ├── data/طلا.xlsx
 ├── report/template.html
 ├── src/
@@ -26,7 +25,6 @@ intra_day_gold_redemptions/
 │   ├── pipeline.py
 │   ├── report_generator.py
 │   └── main.py
-├── tests/
 └── output/
 ```
 
@@ -36,21 +34,18 @@ intra_day_gold_redemptions/
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env
 ```
 
-If TSETMC is blocked, set `TSETMC_PROXY` in `.env`.
+If TSETMC is blocked, set `TSETMC_PROXY` in the environment or a local `.env` file
+(e.g. `TSETMC_PROXY=http://user:pass@host:port`).
 
 ## Commands
 
 ```powershell
-python main.py --poc          # آتش only (AssetId 30018)
-python main.py --asset-id 30018
-python main.py                # all AssetIds
-python -m pytest
+python main.py
 ```
 
-Report file (hyphens, dated):
+Report file:
 
 ```
 output/intra-day-gold-redemptions-YYYY-MM-DD.html
@@ -61,9 +56,9 @@ output/intra-day-gold-redemptions-YYYY-MM-DD.html
 | Input | Source |
 |-------|--------|
 | Last trade, NAV | Main instrument (`بازار معاملات اصلی`) |
-| Legal volume | Live ClientType on `*2` / آد-لات (`buy_N_Volume` — page value, no history) |
+| Institutional volume | Live ClientType on `*2` / آد-لات (`buy_N_Volume`) |
 
-- `Last <= NAV Redemption` → **Redemption** → Value = Legal × NAV Redemption  
-- `Last > NAV Redemption` → **Issue/Redemption** → Value = Legal × Issue NAV  
+- `Last <= NAV Redemption` → **Redemption** → Institutional value = volume × NAV Redemption  
+- `Last > NAV Redemption` → **Issue/Redemption** → Institutional value = volume × Issue NAV  
 
-Missing data → Error Summary; report still written.
+Funds without a market board (`*2`) are skipped. Other failures appear in Error Summary.

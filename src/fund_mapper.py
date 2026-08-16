@@ -73,8 +73,11 @@ def group_funds(rows: list[InstrumentRow] | None = None) -> tuple[list[FundPair]
         main = mains[0]
 
         if not markets:
-            errors.append(
-                f"AssetId={asset_id} ({asset_name}): Missing market instrument (*2)"
+            # Non-listed / incomplete funds (e.g. غیر بورسی) — skip quietly.
+            logger.info(
+                "Skipping AssetId=%s (%s): no market instrument (*2)",
+                asset_id,
+                asset_name,
             )
             continue
         # Prefer exact *2 name over other آد-لات matches.
@@ -113,18 +116,3 @@ def group_funds(rows: list[InstrumentRow] | None = None) -> tuple[list[FundPair]
     )
     return funds, errors
 
-
-def get_fund_by_asset_id(asset_id: str) -> FundPair:
-    funds, _errors = group_funds()
-    for fund in funds:
-        if fund.asset_id == str(asset_id):
-            return fund
-    raise LookupError(f"AssetId {asset_id!r} not found or incomplete in Excel")
-
-
-def get_fund_by_main_instrument(instrument: str) -> FundPair:
-    funds, _errors = group_funds()
-    for fund in funds:
-        if fund.main.instrument == instrument:
-            return fund
-    raise LookupError(f"Main instrument {instrument!r} not found or incomplete")

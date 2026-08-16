@@ -1,8 +1,6 @@
 # Intra-Day Gold Redemptions — CLI entrypoint
 #
 # Usage:
-#   python main.py --poc
-#   python main.py --asset-id 30018
 #   python main.py
 
 from __future__ import annotations

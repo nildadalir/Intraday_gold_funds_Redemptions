@@ -1,5 +1,11 @@
 # Intra-Day Gold Redemptions — configuration
 # Secrets use ${ENV_VAR} only (never commit real secrets).
+db:
+  server: 192.168.220.10          # set to ETL SQL Server host
+  database: DW
+  driver: "ODBC Driver 17 for SQL Server"
+  trusted_connection: false  # true = Windows auth; else DB_USERNAME / DB_PASSWORD in .env
+  use_db: false  # true gets funds list from database
 
 paths:
   excel: "data/طلا.xlsx"
@@ -32,9 +38,3 @@ api:
     Accept-Language: "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7"
     Referer: "https://www.tsetmc.com/"
     Origin: "https://www.tsetmc.com"
-
-poc:
-  asset_id: "30018"
-  instrument: "آتش"
-  main_tse_id: "56987424987755487"
-  market_tse_id: "32651481214999246"

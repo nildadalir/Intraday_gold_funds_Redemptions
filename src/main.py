@@ -1,14 +1,11 @@
 """
 Intra-Day Gold Redemptions — CLI
 
-  python main.py              # batch all AssetIds
-  python main.py --poc        # Proof of Concept: آتش only
-  python main.py --asset-id 30018
+  python main.py
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
@@ -22,11 +19,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import config  # noqa: E402
-from calculator import ErrorRecord, value_fund  # noqa: E402
-from fund_mapper import get_fund_by_asset_id, get_fund_by_main_instrument  # noqa: E402
 from pipeline import run_batch  # noqa: E402
-from report_generator import render_html_report  # noqa: E402
-from tsetmc_client import create_client  # noqa: E402
 
 
 def _setup_logging() -> None:
@@ -48,63 +41,10 @@ def _setup_logging() -> None:
     root.addHandler(fh)
 
 
-def _print_poc(result) -> None:
-    print()
-    print("=== PoC RESULT ===")
-    print(f"Asset:              {result.asset}")
-    print(f"AssetId:            {result.asset_id}")
-    print(f"Main Instrument:    {result.instrument}")
-    print(f"Main TseId:         {result.main_tse_id}")
-    print(f"Last Trade:         {result.last_trade_price}")
-    print(f"NAV Redemption:     {result.nav_redemption}")
-    print(f"NAV Issue:          {result.nav_issue}")
-    print(f"Market Instrument:  {result.market_instrument}")
-    print(f"Market TseId:       {result.market_tse_id}")
-    print(f"Legal Volume:       {result.legal_buy_volume}")
-    print(f"Category:           {result.category}")
-    print(f"Selected Price:     {result.selected_price}")
-    print(f"Calculated Value:   {result.calculated_value}")
-    for w in result.warnings:
-        print(f"Warning:            {w}")
-    print("==================")
-
-
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Intra-Day Gold Redemptions")
-    parser.add_argument(
-        "--poc",
-        action="store_true",
-        help=f"Proof of Concept for {config.POC_INSTRUMENT} only",
-    )
-    parser.add_argument("--asset-id", help="Process a single AssetId")
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Process all AssetIds (default when no flag)",
-    )
-    args = parser.parse_args(argv)
+    _ = argv  # production CLI has no flags
     _setup_logging()
     log = logging.getLogger("main")
-
-    if args.poc or args.asset_id:
-        asset_id = args.asset_id or config.POC_ASSET_ID
-        log.info("PoC / single fund AssetId=%s", asset_id)
-        try:
-            fund = get_fund_by_asset_id(asset_id)
-        except LookupError:
-            fund = get_fund_by_main_instrument(config.POC_INSTRUMENT)
-        with create_client() as client:
-            try:
-                result = value_fund(client, fund)
-            except Exception as exc:
-                log.error("PoC failed: %s", exc)
-                print(f"\n=== FAILED ===\n{exc}")
-                return 1
-        _print_poc(result)
-        path = render_html_report([result], [])
-        print(f"Report: {path}")
-        return 0
-
     log.info("Starting batch (all AssetIds), provider=%s", config.TSETMC_PROVIDER)
     summary = run_batch()
     print(

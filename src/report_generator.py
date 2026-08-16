@@ -29,15 +29,10 @@ def _fmt_price(value: float) -> str:
 
 def _row_dict(result: ValuationResult) -> dict[str, str]:
     return {
-        "asset_id": result.asset_id,
-        "asset": result.asset,
-        "instrument_id": result.instrument_id,
         "instrument": result.instrument,
         "price_used_fmt": _fmt_price(result.selected_price),
-        "legal_volume_fmt": _fmt_int(result.legal_buy_volume),
-        "value_fmt": _fmt_int(result.calculated_value),
-        "delta_fmt": "—",
-        "delta_color": "#8a97a0",
+        "institutional_volume_fmt": _fmt_int(result.legal_buy_volume),
+        "institutional_value_fmt": _fmt_int(result.calculated_value),
     }
 
 
@@ -68,9 +63,6 @@ def render_html_report(
     html = template.render(
         generated_at=now.strftime("%Y-%m-%d %H:%M:%S"),
         report_date=now.strftime("%Y-%m-%d"),
-        subtitle=None,
-        market_banner=None,
-        previous_date=None,
         redemption_funds=[_row_dict(r) for r in redemption],
         issue_redemption_funds=[_row_dict(r) for r in issue],
         errors=[
