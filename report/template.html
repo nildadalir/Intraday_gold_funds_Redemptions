@@ -73,15 +73,16 @@
                   <td width="4" style="width:4px;background-color:#3EC1CF;border-radius:2px;font-size:0;line-height:0;">&nbsp;</td>
                   <td style="padding-left:14px;font-family:Arial,Helvetica,sans-serif;">
                     <h2 style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#005282;">Redemption Funds</h2>
+                    <div style="margin:5px 0 0 0;font-size:11px;font-weight:normal;color:#8a97a0;letter-spacing:0.2px;line-height:1.3;">Redemptions</div>
                   </td>
                 </tr>
               </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:12px;margin-top:14px;">
                 <tr style="color:#5b6b75;">
                   <th align="left" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Instrument</th>
-                  <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Price</th>
+                  <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Price (Toman)</th>
                   <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Institutional volume</th>
-                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Institutional value</th>
+                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Institutional value (Billion Toman)</th>
                 </tr>
                 {% if redemption_funds %}
                   {% for row in redemption_funds %}
@@ -109,15 +110,16 @@
                   <td width="4" style="width:4px;background-color:#3EC1CF;border-radius:2px;font-size:0;line-height:0;">&nbsp;</td>
                   <td style="padding-left:14px;font-family:Arial,Helvetica,sans-serif;">
                     <h2 style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:#005282;">Issue / Redemption Funds</h2>
+                    <div style="margin:5px 0 0 0;font-size:11px;font-weight:normal;color:#8a97a0;letter-spacing:0.2px;line-height:1.3;">Subscriptions/Redemptions</div>
                   </td>
                 </tr>
               </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:12px;margin-top:14px;">
                 <tr style="color:#5b6b75;">
                   <th align="left" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Instrument</th>
-                  <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Price</th>
+                  <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Price (Toman)</th>
                   <th align="right" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Institutional volume</th>
-                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Institutional value</th>
+                  <th align="right" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Institutional value (Billion Toman)</th>
                 </tr>
                 {% if issue_redemption_funds %}
                   {% for row in issue_redemption_funds %}
@@ -137,6 +139,7 @@
             </td>
           </tr>
 
+          {% if errors %}
           <!-- ERROR SUMMARY -->
           <tr>
             <td class="px" style="padding:28px 32px 8px 32px;">
@@ -154,7 +157,6 @@
                   <th align="left" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Tseid</th>
                   <th align="left" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">Error reason</th>
                 </tr>
-                {% if errors %}
                   {% for err in errors %}
                 <tr>
                   <td style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ err.fund_name }}</td>
@@ -162,14 +164,10 @@
                   <td style="padding:10px 0;border-top:1px solid #eaeef1;color:#b02a1c;">{{ err.reason }}</td>
                 </tr>
                   {% endfor %}
-                {% else %}
-                <tr>
-                  <td colspan="3" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No errors</td>
-                </tr>
-                {% endif %}
               </table>
             </td>
           </tr>
+          {% endif %}
 
           <!-- FOOTER -->
           <tr>
