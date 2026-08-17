@@ -61,4 +61,12 @@ output/intra-day-gold-redemptions-YYYY-MM-DD.html
 - `Last <= NAV Redemption` → **Redemption** → Institutional value = volume × NAV Redemption  
 - `Last > NAV Redemption` → **Issue/Redemption** → Institutional value = volume × Issue NAV  
 
-Funds without a market board (`*2`) are skipped. Other failures appear in Error Summary.
+TSETMC prices and NAV are Rial. The report converts display units as:
+
+| Column | Display unit |
+|--------|----------------|
+| Price | Toman (Rial / 10) |
+| Institutional volume | Unit count (not converted) |
+| Institutional value | Billion Toman (Rial / 10 / 1,000,000,000) |
+
+Funds without a market board (`*2`) are skipped. The Error Summary section is omitted when there are no errors.
