@@ -34,14 +34,6 @@ def _fmt_int(value: float | int) -> str:
     return f"{int(round(float(value))):,}"
 
 
-def _fmt_toman_price(value: float) -> str:
-    """Toman from integer Rial has at most one decimal place."""
-    rounded = round(float(value), 1)
-    if rounded == int(rounded):
-        return _fmt_int(rounded)
-    return f"{rounded:,.1f}"
-
-
 def _fmt_billion_toman(value: float) -> str:
     rounded = round(float(value), 3)
     text = f"{rounded:,.3f}".rstrip("0").rstrip(".")
@@ -51,7 +43,7 @@ def _fmt_billion_toman(value: float) -> str:
 def _row_dict(result: ValuationResult) -> dict[str, str]:
     return {
         "instrument": result.instrument,
-        "price_used_fmt": _fmt_toman_price(rial_to_toman(result.selected_price)),
+        "price_used_fmt": _fmt_int(rial_to_toman(result.selected_price)),
         "institutional_volume_fmt": _fmt_int(result.legal_buy_volume),
         "institutional_value_fmt": _fmt_billion_toman(
             rial_to_billion_toman(result.calculated_value)
