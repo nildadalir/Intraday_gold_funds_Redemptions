@@ -16,23 +16,46 @@ logger = logging.getLogger(__name__)
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 
+# TSETMC monetary fields (NAV, last price, volume × NAV) are Rial.
+# Report display: Toman = Rial / 10; Billion Toman = Rial / 10 / 1e9.
+RIAL_PER_TOMAN = 10
+TOMAN_PER_BILLION = 1_000_000_000
+
+
+def rial_to_toman(rial: float) -> float:
+    return float(rial) / RIAL_PER_TOMAN
+
+
+def rial_to_billion_toman(rial: float) -> float:
+    return rial_to_toman(rial) / TOMAN_PER_BILLION
+
 
 def _fmt_int(value: float | int) -> str:
     return f"{int(round(float(value))):,}"
 
 
-def _fmt_price(value: float) -> str:
-    if float(value).is_integer():
-        return _fmt_int(value)
-    return f"{float(value):,.2f}"
+def _fmt_toman_price(value: float) -> str:
+    """Toman from integer Rial has at most one decimal place."""
+    rounded = round(float(value), 1)
+    if rounded == int(rounded):
+        return _fmt_int(rounded)
+    return f"{rounded:,.1f}"
+
+
+def _fmt_billion_toman(value: float) -> str:
+    rounded = round(float(value), 3)
+    text = f"{rounded:,.3f}".rstrip("0").rstrip(".")
+    return text
 
 
 def _row_dict(result: ValuationResult) -> dict[str, str]:
     return {
         "instrument": result.instrument,
-        "price_used_fmt": _fmt_price(result.selected_price),
+        "price_used_fmt": _fmt_toman_price(rial_to_toman(result.selected_price)),
         "institutional_volume_fmt": _fmt_int(result.legal_buy_volume),
-        "institutional_value_fmt": _fmt_int(result.calculated_value),
+        "institutional_value_fmt": _fmt_billion_toman(
+            rial_to_billion_toman(result.calculated_value)
+        ),
     }
 
 
