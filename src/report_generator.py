@@ -8,6 +8,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+import jdatetime
 
 import config
 from calculator import ErrorRecord, ValuationResult
@@ -38,6 +39,24 @@ def _fmt_billion_toman(value: float) -> str:
     rounded = round(float(value), 3)
     text = f"{rounded:,.3f}".rstrip("0").rstrip(".")
     return text
+
+
+def _to_jalali(dt: datetime) -> jdatetime.datetime:
+    naive = dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+    return jdatetime.datetime.fromgregorian(datetime=naive)
+
+
+def _fmt_jalali_date(dt: datetime) -> str:
+    jdt = _to_jalali(dt)
+    return f"{jdt.year:04d}-{jdt.month:02d}-{jdt.day:02d}"
+
+
+def _fmt_jalali_datetime(dt: datetime) -> str:
+    jdt = _to_jalali(dt)
+    return (
+        f"{jdt.year:04d}-{jdt.month:02d}-{jdt.day:02d} "
+        f"{jdt.hour:02d}:{jdt.minute:02d}:{jdt.second:02d}"
+    )
 
 
 def _row_dict(result: ValuationResult) -> dict[str, str]:
@@ -76,8 +95,8 @@ def render_html_report(
     )
     template = env.get_template(config.TEMPLATE_PATH.name)
     html = template.render(
-        generated_at=now.strftime("%Y-%m-%d %H:%M:%S"),
-        report_date=now.strftime("%Y-%m-%d"),
+        generated_at=_fmt_jalali_datetime(now),
+        report_date=_fmt_jalali_date(now),
         redemption_funds=[_row_dict(r) for r in redemption],
         issue_redemption_funds=[_row_dict(r) for r in issue],
         errors=[
