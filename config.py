@@ -54,12 +54,23 @@ def _path(key: str, default: str) -> Path:
     return path if path.is_absolute() else PROJECT_ROOT / path
 
 
-DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = _path("output_dir", "output")
 LOG_DIR = _path("log_dir", "logs")
 REPORT_DIR = _path("report_dir", "report")
 EXCEL_PATH = _path("excel", "data/طلا.xlsx")
 TEMPLATE_PATH = _path("report_template", "report/template.html")
+
+_DB = _CFG.get("db") or {}
+DB_SERVER = str(_DB.get("server") or "")
+DB_DATABASE = str(_DB.get("database", ""))
+DB_DRIVER = str(_DB.get("driver", "ODBC Driver 17 for SQL Server"))
+DB_TRUSTED_CONNECTION = bool(_DB.get("trusted_connection", False))
+DB_USE_DB = bool(_DB.get("use_db", False))
+DB_USERNAME: str | None = _DB.get("username")
+DB_PASSWORD: str | None = _DB.get("password")
+_query_rel = str(_DB.get("query_file", "src/SQL/FundsList.sql"))
+_query_path = Path(_query_rel)
+DB_QUERY_PATH = _query_path if _query_path.is_absolute() else PROJECT_ROOT / _query_path
 
 _BATCH = _CFG.get("batch") or {}
 BATCH_MAX_WORKERS = max(1, int(_BATCH.get("max_workers", 1)))
@@ -80,8 +91,3 @@ TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))
 TSETMC_RETRY_WAIT_SECONDS = float(_RETRY.get("backoff_seconds", 1))
 TSETMC_PROXY: str | None = _API.get("proxy")
 TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
-
-
-def reload() -> None:
-    global _CFG
-    _CFG = _load_yaml()
