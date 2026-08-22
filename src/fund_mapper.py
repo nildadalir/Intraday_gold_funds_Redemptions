@@ -6,7 +6,8 @@ import logging
 import re
 from dataclasses import dataclass
 
-from excel_reader import InstrumentRow, load_instrument_rows
+import config
+from excel_reader import InstrumentRow, load_instrument_rows as load_excel_rows
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,23 @@ def is_market_board(row: InstrumentRow) -> bool:
     return _MARKET_BOARD in (row.market or "")
 
 
+def load_source_rows() -> list[InstrumentRow]:
+    if config.DB_USE_DB:
+        from db_reader import load_instrument_rows as load_db_rows
+
+        logger.info("Instrument source: database (%s)", config.DB_DATABASE)
+        return load_db_rows()
+    logger.info("Instrument source: Excel (%s)", config.EXCEL_PATH.name)
+    return load_excel_rows()
+
+
 def group_funds(rows: list[InstrumentRow] | None = None) -> tuple[list[FundPair], list[str]]:
     """
     Group by AssetId. Returns (funds, structural_errors).
 
     Structural errors = missing main, missing market, or missing TseId.
     """
-    rows = rows if rows is not None else load_instrument_rows()
+    rows = rows if rows is not None else load_source_rows()
     by_asset: dict[str, list[InstrumentRow]] = {}
     for row in rows:
         by_asset.setdefault(row.asset_id, []).append(row)
