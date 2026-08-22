@@ -34,8 +34,6 @@ class InstrumentRow:
     asset: str
     tse_id: str | None
     market: str = ""
-    instrument_code: str = ""
-    trade_symbol: str = ""
 
 
 def _cell_str(value: Any) -> str | None:
@@ -111,13 +109,6 @@ def load_instrument_rows(excel_path: Path | None = None) -> list[InstrumentRow]:
                 continue
 
             market = _cell_str(col("Market")) or ""
-            # Optional helpers when present.
-            instrument_code = ""
-            trade_symbol = ""
-            if "InstrumentCode" in col_index:
-                instrument_code = _cell_str(col("InstrumentCode")) or ""
-            if "TradeSymbol" in col_index:
-                trade_symbol = _cell_str(col("TradeSymbol")) or ""
 
             out.append(
                 InstrumentRow(
@@ -127,8 +118,6 @@ def load_instrument_rows(excel_path: Path | None = None) -> list[InstrumentRow]:
                     asset=asset,
                     tse_id=parse_tse_id(col("TseId")),
                     market=market.strip(),
-                    instrument_code=instrument_code,
-                    trade_symbol=trade_symbol.strip(),
                 )
             )
         logger.info("Loaded %s instrument rows from %s", len(out), path.name)
