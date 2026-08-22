@@ -77,7 +77,7 @@ TSETMC prices and NAV are Rial. The report converts display units as:
 
 | Column | Display unit |
 |--------|----------------|
-| Price | Toman (Rial / 10) |
+| NAV | Toman (Rial / 10) |
 | Institutional volume | Unit count (not converted) |
 | Institutional value | Billion Toman (Rial / 10 / 1,000,000,000) |
 
