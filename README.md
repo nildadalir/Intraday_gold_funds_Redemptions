@@ -4,8 +4,13 @@ GitLab: `intra_day_gold_redemptions`
 
 Daily intraday gold-fund redemption valuation for Turquoise Asset Management.
 
-Groups BI Excel rows by **AssetId**, uses the **main** board for last price + NAV,
+Groups gold-fund instruments by **AssetId**, uses the **main** board for last price + NAV,
 and the **\*2 / آد-لات** board for live institutional (حقوقی) buy volume.
+
+Instrument source is selected in `config.yaml`:
+
+- `db.use_db: false` → Excel (`data/طلا.xlsx` via `src/excel_reader.py`)
+- `db.use_db: true` → SQL Server (`src/db_reader.py`, query in `src/SQL/FundsList.sql`)
 
 ## Layout
 
@@ -14,16 +19,19 @@ intra_day_gold_redemptions/
 ├── main.py
 ├── config.yaml
 ├── config.py
+├── .env.example
 ├── requirements.txt
 ├── data/طلا.xlsx
 ├── report/template.html
 ├── src/
 │   ├── excel_reader.py
+│   ├── db_reader.py
 │   ├── fund_mapper.py
 │   ├── tsetmc_client.py
 │   ├── calculator.py
 │   ├── pipeline.py
 │   ├── report_generator.py
+│   ├── SQL/FundsList.sql
 │   └── main.py
 └── output/
 ```
@@ -34,10 +42,14 @@ intra_day_gold_redemptions/
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+copy .env.example .env
 ```
 
-If TSETMC is blocked, set `TSETMC_PROXY` in the environment or a local `.env` file
-(e.g. `TSETMC_PROXY=http://user:pass@host:port`).
+Fill `.env` with `DB_SERVER`, `DB_USERNAME`, and `DB_PASSWORD`. `.env` is gitignored.
+
+SQL Server source also requires **ODBC Driver 17 for SQL Server** on the machine.
+
+If TSETMC is blocked, also set `TSETMC_PROXY` in `.env`.
 
 ## Commands
 
