@@ -80,11 +80,9 @@ LOG_MAX_BYTES = int(_LOG.get("max_bytes", 1_048_576))
 LOG_BACKUP_COUNT = int(_LOG.get("backup_count", 5))
 
 _API = _CFG.get("api") or {}
-TSETMC_PROVIDER = str(_API.get("provider", "preferred"))
 TSETMC_BASE_URL = str(_API.get("base_url", "https://cdn.tsetmc.com"))
 TSETMC_TIMEOUT_SECONDS = float(_API.get("timeout_seconds", 15))
 TSETMC_CONNECT_TIMEOUT_SECONDS = float(_API.get("connect_timeout_seconds", 8))
-TSETMC_LIB_TIMEOUT_SECONDS = float(_API.get("lib_timeout_seconds", 8))
 FAIL_FAST_ON_TIMEOUT = bool(_API.get("fail_fast_on_timeout", True))
 _RETRY = _API.get("retry") or {}
 TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))

@@ -154,41 +154,9 @@ class TsetmcClient:
         except TsetmcError as exc:
             errors.append(str(exc))
 
-        # pytse instinfofast fallback
-        try:
-            return self._last_price_instinfofast(tse_id)
-        except TsetmcError as exc:
-            errors.append(str(exc))
-
         raise TsetmcDataError(
             f"Missing Last Trade Price for TseId={tse_id}: " + " | ".join(errors)
         )
-
-    def _last_price_instinfofast(self, tse_id: str) -> float:
-        import requests
-
-        url = (
-            "http://old.tsetmc.com/tsev2/data/instinfofast.aspx"
-            f"?i={tse_id}&c=0&e=1"
-        )
-        try:
-            session = requests.Session()
-            session.trust_env = False
-            if config.TSETMC_PROXY:
-                session.proxies = {
-                    "http": config.TSETMC_PROXY,
-                    "https": config.TSETMC_PROXY,
-                }
-            response = session.get(
-                url, timeout=config.TSETMC_LIB_TIMEOUT_SECONDS, headers=config.TSETMC_HEADERS
-            )
-            response.raise_for_status()
-            price = float(response.text.split(";")[0].split(",")[2])
-            if price <= 0:
-                raise TsetmcDataError("non-positive last price from instinfofast")
-            return price
-        except Exception as exc:
-            raise TsetmcDataError(f"instinfofast failed: {exc}") from exc
 
     def get_etf_nav(self, tse_id: str) -> EtfNav:
         payload = self._get_json(f"/api/Fund/GetETFByInsCode/{tse_id}")

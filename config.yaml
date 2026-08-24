@@ -5,7 +5,7 @@ db:
   database: DW
   driver: "ODBC Driver 17 for SQL Server"
   trusted_connection: false  # true = Windows auth; else DB_USERNAME / DB_PASSWORD in .env
-  use_db: true  # true gets funds list from database; false uses Excel
+  use_db: false  # true gets funds list from database; false uses Excel
   username: ${DB_USERNAME}
   password: ${DB_PASSWORD}
   query_file: "src/SQL/FundsList.sql"
@@ -25,12 +25,10 @@ logging:
   backup_count: 5
 
 api:
-  provider: "preferred"
   base_url: "https://cdn.tsetmc.com"
   proxy: ${TSETMC_PROXY}
   timeout_seconds: 15
   connect_timeout_seconds: 8
-  lib_timeout_seconds: 8
   fail_fast_on_timeout: true
   retry:
     max_attempts: 2

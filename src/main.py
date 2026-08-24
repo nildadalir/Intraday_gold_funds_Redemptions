@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     _ = argv  # production CLI has no flags
     _setup_logging()
     log = logging.getLogger("main")
-    log.info("Starting batch (all AssetIds), provider=%s", config.TSETMC_PROVIDER)
+    log.info("Starting batch (all AssetIds)")
     summary = run_batch()
     print(
         f"\nBatch complete: ok={summary.ok_count} errors={summary.error_count}"
