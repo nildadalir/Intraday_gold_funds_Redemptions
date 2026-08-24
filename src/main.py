@@ -39,6 +39,8 @@ def _setup_logging() -> None:
     )
     fh.setFormatter(fmt)
     root.addHandler(fh)
+    logging.getLogger("httpx").setLevel(config.LOG_HTTP_LEVEL)
+    logging.getLogger("httpcore").setLevel(config.LOG_HTTP_LEVEL)
 
 
 def main(argv: list[str] | None = None) -> int:

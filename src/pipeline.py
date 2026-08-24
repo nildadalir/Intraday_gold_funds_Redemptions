@@ -51,28 +51,28 @@ def run_batch(
         logger.error("%s", msg)
 
     workers = config.BATCH_MAX_WORKERS
-    logger.info("Batch: funds=%s workers=%s", len(funds), workers)
+    logger.info("Batch: funds=%s workers=%s shared_client=true", len(funds), workers)
 
-    if workers <= 1:
-        client = create_client()
-        try:
+    def _accept(result: ValuationResult | ErrorRecord) -> None:
+        if isinstance(result, ErrorRecord):
+            summary.errors.append(result)
+        else:
+            summary.processed.append(result)
+
+    client = create_client()
+    try:
+        if workers <= 1:
             for fund in funds:
-                result = value_fund_safe(fund, client)
-                if isinstance(result, ErrorRecord):
-                    summary.errors.append(result)
-                else:
-                    summary.processed.append(result)
-        finally:
-            client.close()
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(value_fund_safe, fund, None): fund for fund in funds}
-            for fut in as_completed(futures):
-                result = fut.result()
-                if isinstance(result, ErrorRecord):
-                    summary.errors.append(result)
-                else:
-                    summary.processed.append(result)
+                _accept(value_fund_safe(fund, client))
+        else:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = [
+                    pool.submit(value_fund_safe, fund, client) for fund in funds
+                ]
+                for fut in as_completed(futures):
+                    _accept(fut.result())
+    finally:
+        client.close()
 
     summary.report_path = render_html_report(
         summary.processed, summary.errors, output_path=output_path

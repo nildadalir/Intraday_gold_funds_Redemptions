@@ -116,46 +116,17 @@ class TsetmcClient:
         return _once()
 
     def get_last_trade_price(self, tse_id: str) -> float:
-        """Last trade from ClosingPriceInfo; fall back to daily list."""
-        errors: list[str] = []
-        try:
-            payload = self._get_json(
-                f"/api/ClosingPrice/GetClosingPriceInfo/{tse_id}"
-            )
-            info = payload.get("closingPriceInfo")
-            if isinstance(info, dict):
-                raw = info.get("pDrCotVal") or info.get("pl") or info.get("pClosing")
-                if raw is not None and float(raw) > 0:
-                    return float(raw)
-            errors.append("ClosingPriceInfo empty/invalid")
-        except TsetmcError as exc:
-            errors.append(str(exc))
-            if config.FAIL_FAST_ON_TIMEOUT and "Timeout" in str(exc):
-                raise TsetmcDataError(
-                    f"Could not get last price for {tse_id}: {exc}"
-                ) from exc
-
-        try:
-            payload = self._get_json(
-                f"/api/ClosingPrice/GetClosingPriceDailyList/{tse_id}/0"
-            )
-            rows = payload.get("closingPriceDaily") or []
-            if isinstance(rows, list) and rows:
-                best = max(
-                    (r for r in rows if isinstance(r, dict)),
-                    key=lambda r: int(r.get("dEven") or 0),
-                    default=None,
-                )
-                if best:
-                    raw = best.get("pDrCotVal") or best.get("pClosing")
-                    if raw is not None and float(raw) > 0:
-                        return float(raw)
-            errors.append("ClosingPriceDailyList empty/invalid")
-        except TsetmcError as exc:
-            errors.append(str(exc))
-
+        """Last trade from ClosingPriceInfo."""
+        payload = self._get_json(
+            f"/api/ClosingPrice/GetClosingPriceInfo/{tse_id}"
+        )
+        info = payload.get("closingPriceInfo")
+        if isinstance(info, dict):
+            raw = info.get("pDrCotVal") or info.get("pl") or info.get("pClosing")
+            if raw is not None and float(raw) > 0:
+                return float(raw)
         raise TsetmcDataError(
-            f"Missing Last Trade Price for TseId={tse_id}: " + " | ".join(errors)
+            f"Missing Last Trade Price for TseId={tse_id}: ClosingPriceInfo empty/invalid"
         )
 
     def get_etf_nav(self, tse_id: str) -> EtfNav:
