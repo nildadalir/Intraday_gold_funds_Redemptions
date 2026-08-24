@@ -18,18 +18,18 @@ paths:
   log_dir: "logs"
 
 batch:
-  max_workers: 1
+  max_workers: 4  # funds processed in parallel (1 = sequential)
 
 logging:
   max_bytes: 1048576
   backup_count: 5
+  http_level: WARNING  # httpx/httpcore; INFO logs every GET
 
 api:
   base_url: "https://cdn.tsetmc.com"
   proxy: ${TSETMC_PROXY}
   timeout_seconds: 15
   connect_timeout_seconds: 8
-  fail_fast_on_timeout: true
   retry:
     max_attempts: 2
     backoff_seconds: 1
