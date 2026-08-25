@@ -1,0 +1,1 @@
+# SMTP helper package

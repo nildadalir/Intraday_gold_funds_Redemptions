@@ -1,12 +1,13 @@
 # Intra-Day Gold Redemptions — CLI entrypoint
 #
 # Usage:
-#   python main.py
+#   python run.py
+#   python run.py --no-send
+#   python run.py --force --no-send
 
 from __future__ import annotations
 
 import runpy
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
