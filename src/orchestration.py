@@ -179,9 +179,8 @@ def report_name_for(session: str) -> str:
     return f"GOLD_{session}"
 
 
-def html_path_for(session: str, *, error: bool = False) -> Path:
-    folder = config.OUTPUT_ERROR_DIR if error else config.OUTPUT_DIR
-    return folder / f"intra-day-gold-redemptions-{session}.html"
+def html_path_for(session: str) -> Path:
+    return config.OUTPUT_DIR / f"intra-day-gold-redemptions-{session}.html"
 
 
 def isnonworking_label() -> str:
@@ -264,6 +263,7 @@ def run_daily_attempt(
     no_send: bool = False,
     force: bool = False,
 ) -> PipelineAttemptResult:
+    """Run generate → validate → send for Tehran *today* only (no historic catch-up)."""
     prune_log(config.ORCHESTRATION_LOG, config.LOG_RETENTION_DAYS)
     session = session_date()
     name = report_name_for(session)

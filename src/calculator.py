@@ -16,22 +16,11 @@ Category = Literal["Redemption", "Issue/Redemption"]
 
 @dataclass(frozen=True)
 class ValuationResult:
-    asset_id: str
-    asset: str
-    instrument_id: str
     instrument: str
-    market_instrument: str
-    main_tse_id: str
-    market_tse_id: str
-    last_trade_price: float
-    nav_redemption: float
-    nav_issue: float | None
     legal_buy_volume: float
-    legal_sell_volume: float
     selected_price: float
     calculated_value: float
     category: Category
-    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -54,53 +43,29 @@ def classify(
 
 
 def value_fund(client: TsetmcClient, fund: FundPair) -> ValuationResult:
-    asset = fund.asset
     main = fund.main
     market = fund.market
     assert main.tse_id and market.tse_id
 
-    logger.info(
-        "Processing AssetId=%s Asset=%s main=%s(%s) market=%s(%s)",
-        fund.asset_id,
-        asset,
-        main.instrument,
-        main.tse_id,
-        market.instrument,
-        market.tse_id,
-    )
-
     last = client.get_last_trade_price(main.tse_id)
-    logger.info("Last Trade Price: %s", last)
-
     nav = client.get_etf_nav(main.tse_id)
-    logger.info("NAV Redemption: %s", nav.redemption)
-    logger.info("NAV Issue: %s", nav.issue)
-
     volumes = client.get_legal_volumes(market.tse_id)
     legal_buy = volumes.buy_n_volume
     legal_sell = volumes.sell_n_volume
-    logger.info(
-        "Legal Volume buy_N=%s sell_N=%s source=%s",
-        legal_buy,
-        legal_sell,
-        volumes.source,
-    )
 
-    warnings: list[str] = []
     if legal_sell and abs(legal_buy - legal_sell) > 1e-6:
-        msg = (
-            f"Legal buy/sell differ for {market.instrument}: "
-            f"buy={legal_buy} sell={legal_sell}; using buy"
+        logger.warning(
+            "Legal buy/sell differ for %s: buy=%s sell=%s; using buy",
+            market.instrument,
+            legal_buy,
+            legal_sell,
         )
-        warnings.append(msg)
-        logger.warning("%s", msg)
-
     if legal_buy <= 0:
-        warnings.append(
-            f"Live legal volume is 0 for {market.instrument} "
-            f"(TseId={market.tse_id}); using page value 0"
+        logger.warning(
+            "Live legal volume is 0 for %s (TseId=%s); using page value 0",
+            market.instrument,
+            market.tse_id,
         )
-        logger.warning("%s", warnings[-1])
 
     category, price_key = classify(last, nav.redemption)
     if price_key == "nav_redemption":
@@ -113,25 +78,24 @@ def value_fund(client: TsetmcClient, fund: FundPair) -> ValuationResult:
         selected = nav.issue
 
     value = legal_buy * selected
-    logger.info("Category: %s | Selected Price: %s | Value: %s", category, selected, value)
+    logger.info(
+        "AssetId=%s %s last=%s nav_red=%s nav_issue=%s buy_N=%s %s value=%s",
+        fund.asset_id,
+        main.instrument,
+        last,
+        nav.redemption,
+        nav.issue,
+        legal_buy,
+        category,
+        value,
+    )
 
     return ValuationResult(
-        asset_id=fund.asset_id,
-        asset=asset,
-        instrument_id=main.instrument_id,
         instrument=main.instrument,
-        market_instrument=market.instrument,
-        main_tse_id=main.tse_id,
-        market_tse_id=market.tse_id,
-        last_trade_price=last,
-        nav_redemption=nav.redemption,
-        nav_issue=nav.issue,
         legal_buy_volume=legal_buy,
-        legal_sell_volume=legal_sell,
         selected_price=selected,
         calculated_value=value,
         category=category,
-        warnings=tuple(warnings),
     )
 
 

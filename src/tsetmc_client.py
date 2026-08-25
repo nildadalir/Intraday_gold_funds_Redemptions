@@ -41,7 +41,6 @@ class EtfNav:
 class ClientTypeVolumes:
     buy_n_volume: float
     sell_n_volume: float
-    source: str = "cdn_live"
 
 
 class TsetmcClient:
@@ -51,12 +50,10 @@ class TsetmcClient:
         base_url: str = config.TSETMC_BASE_URL,
         timeout: float = config.TSETMC_TIMEOUT_SECONDS,
         connect_timeout: float = config.TSETMC_CONNECT_TIMEOUT_SECONDS,
-        max_retries: int = config.TSETMC_MAX_RETRIES,
         proxy: str | None = config.TSETMC_PROXY,
         headers: dict[str, str] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.max_retries = max(1, max_retries)
         self.proxy = proxy
         timeout_cfg = httpx.Timeout(timeout, connect=connect_timeout)
         kwargs: dict[str, Any] = {
@@ -81,39 +78,34 @@ class TsetmcClient:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    @retry(
+        reraise=True,
+        stop=stop_after_attempt(max(1, int(config.TSETMC_MAX_RETRIES))),
+        wait=wait_exponential(
+            multiplier=config.TSETMC_RETRY_WAIT_SECONDS, min=1, max=8
+        ),
+        retry=retry_if_exception_type(TsetmcNetworkError),
+    )
     def _get_json(self, path: str) -> dict[str, Any]:
-        @retry(
-            reraise=True,
-            stop=stop_after_attempt(self.max_retries),
-            wait=wait_exponential(
-                multiplier=config.TSETMC_RETRY_WAIT_SECONDS, min=1, max=8
-            ),
-            retry=retry_if_exception_type(TsetmcNetworkError),
-        )
-        def _once() -> dict[str, Any]:
-            try:
-                response = self._client.get(path)
-            except httpx.TimeoutException as exc:
-                raise TsetmcNetworkError(
-                    f"Timeout calling {self.base_url}{path}: {exc}"
-                ) from exc
-            except httpx.HTTPError as exc:
-                raise TsetmcNetworkError(
-                    f"HTTP error calling {self.base_url}{path}: {exc}"
-                ) from exc
-            if response.status_code >= 400:
-                raise TsetmcDataError(
-                    f"HTTP {response.status_code} for {path}"
-                )
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                raise TsetmcDataError(f"Non-JSON response for {path}") from exc
-            if not isinstance(payload, dict):
-                raise TsetmcDataError(f"Unexpected JSON root for {path}")
-            return payload
-
-        return _once()
+        try:
+            response = self._client.get(path)
+        except httpx.TimeoutException as exc:
+            raise TsetmcNetworkError(
+                f"Timeout calling {self.base_url}{path}: {exc}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise TsetmcNetworkError(
+                f"HTTP error calling {self.base_url}{path}: {exc}"
+            ) from exc
+        if response.status_code >= 400:
+            raise TsetmcDataError(f"HTTP {response.status_code} for {path}")
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise TsetmcDataError(f"Non-JSON response for {path}") from exc
+        if not isinstance(payload, dict):
+            raise TsetmcDataError(f"Unexpected JSON root for {path}")
+        return payload
 
     def get_last_trade_price(self, tse_id: str) -> float:
         """Last trade from ClosingPriceInfo."""
@@ -160,9 +152,7 @@ class TsetmcClient:
             raise TsetmcDataError(f"Missing ClientType for TseId={tse_id}")
         buy_n = float(ct.get("buy_N_Volume") or 0)
         sell_n = float(ct.get("sell_N_Volume") or 0)
-        return ClientTypeVolumes(
-            buy_n_volume=buy_n, sell_n_volume=sell_n, source="cdn_live"
-        )
+        return ClientTypeVolumes(buy_n_volume=buy_n, sell_n_volume=sell_n)
 
 
 def create_client() -> TsetmcClient:
