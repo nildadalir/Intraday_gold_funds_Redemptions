@@ -28,6 +28,8 @@ python run.py --force --no-send
 
 There is no `--date`. The session is **today** (Gregorian, Tehran). Gold is a live TSETMC snapshot, not a warehouse `DateKey`.
 
+Unlike ShareHolding, this job **does not** walk the log and regenerate missed **past** calendar days. TSETMC data is live: a late run would fetch *now*, not last Saturday’s tape. Only **today** is skipped or retried (reuse HTML + SMTP if generate already succeeded).
+
 ---
 
 ## 2. Pipeline
@@ -109,7 +111,7 @@ File: `data/orchestration_log.txt` (TSV).
 | `IsSuccessfulEmail` | `yes` / `no` / `skipped` |
 | `Isnonworking` | `yes` if Tehran weekday is Thu/Fri; else `no` |
 
-A day is **complete** when generate is `yes` and, if email is required, email is `yes`. Then the job skips.
+A day is **complete** when generate is `yes` and, if email is required, email is `yes`. Then the job skips **today** only. Incomplete rows for older dates in the log are **not** replayed.
 
 Rows older than `logging.retention_days` (100) are dropped each run.
 

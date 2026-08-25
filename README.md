@@ -40,7 +40,7 @@ python run.py --force --no-send
 | `--no-send` | Skip SMTP |
 | `--force` | Rebuild even if today is already logged successful |
 
-The session date is **today** (Gregorian, `Asia/Tehran`). A day is finished only when **both** `IsSuccessfulGenerate` and `IsSuccessfulEmail` are `yes` (email not required if `email.send` is false or `--no-send`). `python run.py` does not email a completed day again. If generate succeeded and SMTP failed, existing HTML is reused and only email is retried.
+The session date is **today** (Gregorian, `Asia/Tehran`). A day is finished only when **both** `IsSuccessfulGenerate` and `IsSuccessfulEmail` are `yes` (email not required if `email.send` is false or `--no-send`). `python run.py` does not email a completed **today** again, and it does **not** backfill old dates from the log (live TSETMC, not warehouse sessions). If generate succeeded and SMTP failed, existing HTML is reused and only email is retried.
 
 All-zero values (closed market or before open): HTML goes to `output_error/`; generate is logged failed; email is not sent.
 
