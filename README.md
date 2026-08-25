@@ -1,40 +1,17 @@
 # Intra-Day Gold Redemptions
 
-GitLab: `intra_day_gold_redemptions`
+Daily gold-fund redemption valuation. Layout follows the Turquoise BI orchestrator: generate → validate → send → log.
 
-Daily intraday gold-fund redemption valuation for Turquoise Asset Management.
+| Field | Value |
+| --- | --- |
+| Entry | `python run.py` |
+| Orchestrator | [`src/orchestration.py`](src/orchestration.py) |
+| Settings | [`config.yaml`](config.yaml) |
+| Last updated | 2026-08-25 |
 
-Groups gold-fund instruments by **AssetId**, uses the **main** board for last price + NAV,
-and the **\*2 / آد-لات** board for live institutional (حقوقی) buy volume.
+Formulas: [`docs/Logic_Documentation.md`](docs/Logic_Documentation.md). Modules: [`docs/Architecture.md`](docs/Architecture.md). Pipeline: [`docs/Orchestration.md`](docs/Orchestration.md). SQL: [`src/SQL/FundsList.sql`](src/SQL/FundsList.sql).
 
-Instrument source is selected in `config.yaml`:
-
-- `db.use_db: false` → Excel (`data/طلا.xlsx` via `src/excel_reader.py`)
-- `db.use_db: true` → SQL Server (`src/db_reader.py`, query in `src/SQL/FundsList.sql`)
-
-## Layout
-
-```
-intra_day_gold_redemptions/
-├── main.py
-├── config.yaml
-├── config.py
-├── .env.example
-├── requirements.txt
-├── data/طلا.xlsx
-├── report/template.html
-├── src/
-│   ├── excel_reader.py
-│   ├── db_reader.py
-│   ├── fund_mapper.py
-│   ├── tsetmc_client.py
-│   ├── calculator.py
-│   ├── pipeline.py
-│   ├── report_generator.py
-│   ├── SQL/FundsList.sql
-│   └── main.py
-└── output/
-```
+---
 
 ## Setup
 
@@ -45,40 +22,83 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-Fill `.env` with `DB_SERVER`, `DB_USERNAME`, and `DB_PASSWORD`. `.env` is gitignored.
+Put `DB_SERVER`, `DB_USERNAME`, and `DB_PASSWORD` in `.env`. Do not commit `.env`. SQL Server source also needs **ODBC Driver 17 for SQL Server**. If TSETMC is blocked, set `TSETMC_PROXY` in `.env`.
 
-SQL Server source also requires **ODBC Driver 17 for SQL Server** on the machine.
+Instrument source: `db.use_db` in `config.yaml` (`false` = Excel `data/طلا.xlsx`, `true` = SQL).
 
-If TSETMC is blocked, also set `TSETMC_PROXY` in `.env`.
+---
 
-## Commands
+## Run
 
 ```powershell
-python main.py
+python run.py
+python run.py --force --no-send
 ```
 
-Report file:
+| Flag | Meaning |
+| --- | --- |
+| `--no-send` | Skip SMTP |
+| `--force` | Rebuild even if today is already logged successful |
 
+The session date is **today** (Gregorian, `Asia/Tehran`). A day is finished only when **both** `IsSuccessfulGenerate` and `IsSuccessfulEmail` are `yes` (email not required if `email.send` is false or `--no-send`). `python run.py` does not email a completed day again. If generate succeeded and SMTP failed, existing HTML is reused and only email is retried.
+
+All-zero values (closed market or before open): HTML goes to `output_error/`; generate is logged failed; email is not sent.
+
+---
+
+## Layout
+
+```text
+run.py                       the file to run
+src/main.py                  CLI + logging
+src/orchestration.py         generate → validate → send → log
+config.yaml
+.env                         DB / proxy secrets (gitignored)
+Send_Email/Email.py          SMTP send
+src/pipeline.py              TSETMC batch
+src/calculator.py            classify + value
+src/report_generator.py      HTML
+output/                      HTML on success
+output_error/                all-zero or validation failure
+data/orchestration_log.txt   ReportName, SendDate, IsSuccessfulGenerate, IsSuccessfulEmail, Isnonworking
+logs/                        TSETMC run log
 ```
-output/intra-day-gold-redemptions-YYYY-MM-DD.html
+
+Log rows older than **100 days** (`logging.retention_days`) are dropped on each run.
+
+---
+
+## Email
+
+All email settings live in [`config.yaml`](config.yaml) under `email:`:
+
+```yaml
+email:
+  send: true
+  to:
+    - someone@iidic.com
+  cc:
+    - manager@iidic.com
+  subject: "Intra-Day Gold Redemptions"
+  body: |
+    Dear colleague,
+
+    Please find attached the intra-day gold redemptions report for {{Date}}.
+
+    Best regards,
+    FirouzehBI
+  smtp_server: "192.168.200.6"
+  smtp_port: 25
+  sender: "dalirnia@iidic.com"
 ```
 
-## Logic
+`{{Date}}` is replaced with the session date. `--no-send` still skips SMTP for that run. The pipeline calls `Send_Email/Email.py` and attaches the HTML from `output/` only.
 
-| Input | Source |
-|-------|--------|
-| Last trade, NAV | Main instrument (`بازار معاملات اصلی`) |
-| Institutional volume | Live ClientType on `*2` / آد-لات (`buy_N_Volume`) |
+---
 
-- `Last <= NAV Redemption` → **Redemption** → Institutional value = volume × NAV Redemption  
-- `Last > NAV Redemption` → **Issue/Redemption** → Institutional value = volume × Issue NAV  
+## Related documents
 
-TSETMC prices and NAV are Rial. The report converts display units as:
-
-| Column | Display unit |
-|--------|----------------|
-| NAV | Toman (Rial / 10) |
-| Institutional volume | Unit count (not converted) |
-| Institutional value | Billion Toman (Rial / 10 / 1,000,000,000) |
-
-Funds without a market board (`*2`) are skipped. The Error Summary section is omitted when there are no errors.
+- [`docs/Orchestration.md`](docs/Orchestration.md)
+- [`docs/Logic_Documentation.md`](docs/Logic_Documentation.md)
+- [`docs/Architecture.md`](docs/Architecture.md)
+- [`src/SQL/FundsList.sql`](src/SQL/FundsList.sql)
