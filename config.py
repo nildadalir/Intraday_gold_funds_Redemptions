@@ -56,6 +56,7 @@ def _path(key: str, default: str) -> Path:
 
 
 OUTPUT_DIR = _path("output_dir", "output")
+OUTPUT_ERROR_DIR = _path("output_error_dir", "output_error")
 LOG_DIR = _path("log_dir", "logs")
 REPORT_DIR = _path("report_dir", "report")
 EXCEL_PATH = _path("excel", "data/طلا.xlsx")
@@ -79,8 +80,40 @@ BATCH_MAX_WORKERS = max(1, int(_BATCH.get("max_workers", 1)))
 _LOG = _CFG.get("logging") or {}
 LOG_MAX_BYTES = int(_LOG.get("max_bytes", 1_048_576))
 LOG_BACKUP_COUNT = int(_LOG.get("backup_count", 5))
+LOG_RETENTION_DAYS = int(_LOG.get("retention_days", 100))
 _http_level = str(_LOG.get("http_level", "WARNING")).upper()
 LOG_HTTP_LEVEL = getattr(logging, _http_level, logging.WARNING)
+
+ORCHESTRATION_LOG = _path("orchestration_log", "data/orchestration_log.txt")
+
+_EMAIL = _CFG.get("email") or {}
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def _email_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [p.strip() for p in value.split(",") if p.strip()]
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+EMAIL_SEND = _as_bool(_EMAIL.get("send", False))
+EMAIL_TO = _email_list(_EMAIL.get("to"))
+EMAIL_CC = _email_list(_EMAIL.get("cc"))
+EMAIL_SUBJECT = str(_EMAIL.get("subject", "Intra-Day Gold Redemptions"))
+EMAIL_BODY = str(_EMAIL.get("body", ""))
+EMAIL_SMTP_SERVER = str(_EMAIL.get("smtp_server") or _EMAIL.get("email_server") or "")
+EMAIL_SMTP_PORT = int(_EMAIL.get("smtp_port") or _EMAIL.get("email_port") or 25)
+EMAIL_SENDER = str(_EMAIL.get("sender") or _EMAIL.get("email_sender") or "")
+EMAIL_SMTP_RETRIES = int(_EMAIL.get("smtp_retries", 3))
+EMAIL_SMTP_RETRY_SECONDS = int(_EMAIL.get("smtp_retry_seconds", 10))
+EMAIL_SMTP_TIMEOUT = int(_EMAIL.get("smtp_timeout", 30))
 
 _API = _CFG.get("api") or {}
 TSETMC_BASE_URL = str(_API.get("base_url", "https://cdn.tsetmc.com"))
@@ -91,3 +124,9 @@ TSETMC_MAX_RETRIES = int(_RETRY.get("max_attempts", 2))
 TSETMC_RETRY_WAIT_SECONDS = float(_RETRY.get("backoff_seconds", 1))
 TSETMC_PROXY: str | None = _API.get("proxy")
 TSETMC_HEADERS: dict[str, str] = dict(_API.get("headers") or {})
+
+_MARKET = _CFG.get("market") or {}
+MARKET_TIMEZONE = str(_MARKET.get("timezone", "Asia/Tehran"))
+MARKET_OPEN_WEEKDAYS = list(_MARKET.get("open_weekdays") or ["sat", "sun", "mon", "tue", "wed"])
+MARKET_OPEN_TIME = str(_MARKET.get("open_time", "12:00"))
+MARKET_CLOSE_TIME = str(_MARKET.get("close_time", "18:00"))

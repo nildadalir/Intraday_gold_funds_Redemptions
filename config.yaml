@@ -15,7 +15,16 @@ paths:
   report_template: "report/template.html"
   report_dir: "report"
   output_dir: "output"
+  output_error_dir: "output_error"
   log_dir: "logs"
+  orchestration_log: "data/orchestration_log.txt"
+
+# Gold ETF cash market (Tehran). Used only to explain all-zero runs in the log.
+market:
+  timezone: Asia/Tehran
+  open_weekdays: [sat, sun, mon, tue, wed]
+  open_time: "12:00"
+  close_time: "18:00"
 
 batch:
   max_workers: 4  # funds processed in parallel (1 = sequential)
@@ -24,6 +33,26 @@ logging:
   max_bytes: 1048576
   backup_count: 5
   http_level: WARNING  # httpx/httpcore; INFO logs every GET
+  retention_days: 100
+
+email:
+  send: false  # true = SMTP after a successful output/ report
+  to: []
+  cc: []
+  subject: "Intra-Day Gold Redemptions"
+  body: |
+    Dear colleague,
+
+    Please find attached the intra-day gold redemptions report for {{Date}}.
+
+    Best regards,
+    FirouzehBI
+  smtp_server: "192.168.200.6"
+  smtp_port: 25
+  sender: "dalirnia@iidic.com"
+  smtp_retries: 3
+  smtp_retry_seconds: 10
+  smtp_timeout: 30
 
 api:
   base_url: "https://cdn.tsetmc.com"

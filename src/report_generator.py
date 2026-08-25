@@ -70,6 +70,31 @@ def _row_dict(result: ValuationResult) -> dict[str, str]:
     }
 
 
+def report_filename(at: datetime | None = None) -> str:
+    now = at or datetime.now(tz=TEHRAN)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=TEHRAN)
+    else:
+        now = now.astimezone(TEHRAN)
+    return f"intra-day-gold-redemptions-{now.strftime('%Y-%m-%d')}.html"
+
+
+def session_date(at: datetime | None = None) -> str:
+    now = at or datetime.now(tz=TEHRAN)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=TEHRAN)
+    else:
+        now = now.astimezone(TEHRAN)
+    return now.strftime("%Y-%m-%d")
+
+
+def all_calculated_values_zero(results: list[ValuationResult]) -> bool:
+    """True when there is nothing to report, or every fund value is 0."""
+    if not results:
+        return True
+    return all(float(r.calculated_value) == 0.0 for r in results)
+
+
 def render_html_report(
     results: list[ValuationResult],
     errors: list[ErrorRecord],
@@ -109,11 +134,17 @@ def render_html_report(
         ],
     )
 
-    config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    out = output_path or (
-        config.OUTPUT_DIR
-        / f"intra-day-gold-redemptions-{now.strftime('%Y-%m-%d')}.html"
-    )
+    filename = report_filename(now)
+    if output_path is None:
+        if all_calculated_values_zero(results):
+            config.OUTPUT_ERROR_DIR.mkdir(parents=True, exist_ok=True)
+            out = config.OUTPUT_ERROR_DIR / filename
+        else:
+            config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            out = config.OUTPUT_DIR / filename
+    else:
+        out = output_path
+        out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     logger.info("Wrote HTML report: %s", out)
     return out

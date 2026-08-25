@@ -10,7 +10,8 @@ from pathlib import Path
 import config
 from calculator import ErrorRecord, ValuationResult, value_fund_safe
 from fund_mapper import FundPair, group_funds
-from report_generator import render_html_report
+from market_hours import is_gold_market_open
+from report_generator import all_calculated_values_zero, render_html_report
 from tsetmc_client import create_client
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,13 @@ def run_batch(
                     _accept(fut.result())
     finally:
         client.close()
+
+    if all_calculated_values_zero(summary.processed) and output_path is None:
+        logger.warning(
+            "All calculated values are 0; writing to %s (gold market open=%s)",
+            config.OUTPUT_ERROR_DIR,
+            is_gold_market_open(),
+        )
 
     summary.report_path = render_html_report(
         summary.processed, summary.errors, output_path=output_path

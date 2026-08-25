@@ -50,6 +50,8 @@ Desktop.ini
 logs/
 *.log
 output/
+output_error/
+data/orchestration_log.txt
 *.tmp
 *.temp
 *.bak
