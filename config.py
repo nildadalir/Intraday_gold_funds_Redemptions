@@ -88,6 +88,7 @@ ORCHESTRATION_LOG = _path("orchestration_log", "logs/orchestration_log.txt")
 
 _REPORT = _CFG.get("report") or {}
 REPORT_BASENAME = str(_REPORT.get("basename", "gold_redemptions"))
+REPORT_FILE_PREFIX = str(_REPORT.get("file_prefix", "intra-day-gold-redemptions"))
 
 _EMAIL = _CFG.get("email") or {}
 

@@ -184,7 +184,7 @@ def report_name_for(log_stamp: str) -> str:
 
 
 def html_path_for(file_stamp: str) -> Path:
-    return config.OUTPUT_DIR / f"{config.REPORT_BASENAME}-{file_stamp}.html"
+    return config.OUTPUT_DIR / f"{config.REPORT_FILE_PREFIX}-{file_stamp}.html"
 
 
 def html_path_for_report_name(report_name: str) -> Path:
@@ -259,7 +259,7 @@ def _move_to_error(path: Path) -> Path:
 
 def _drop_html_for_session(file_stamp: str) -> None:
     for folder in (config.OUTPUT_DIR, config.OUTPUT_ERROR_DIR):
-        target = folder / f"{config.REPORT_BASENAME}-{file_stamp}.html"
+        target = folder / f"{config.REPORT_FILE_PREFIX}-{file_stamp}.html"
         if target.is_file():
             target.unlink()
 

@@ -40,7 +40,7 @@ python run.py --force --no-send
 | `--no-send` | Skip SMTP |
 | `--force` | Rebuild HTML even if this HH:MM snapshot is already logged successful |
 
-Each run uses Tehran **date and time** (`YYYY-MM-DD HH:MM`). The HTML file is `gold_redemptions-YYYY-MM-DD-HH-MM.html`, so later runs do not overwrite earlier ones. Skip/reuse apply only to that exact timestamp (re-running in the same minute). `python run.py` does **not** backfill old dates from the log (live TSETMC, not warehouse sessions). If generate succeeded and SMTP failed, the next run attaches that HTML with the new report (at most those two files). Older unsent reports are not carried further.
+Each run uses Tehran **date and time** (`YYYY-MM-DD HH:MM`). The HTML file is `intra-day-gold-redemptions-YYYY-MM-DD-HH-MM.html`, so later runs do not overwrite earlier ones. Skip/reuse apply only to that exact timestamp (re-running in the same minute). `python run.py` does **not** backfill old dates from the log (live TSETMC, not warehouse sessions). If generate succeeded and SMTP failed, the next run attaches that HTML with the new report (at most those two files). Older unsent reports are not carried further.
 
 All-zero values (closed market or before open): HTML goes to `output_error/`; generate is logged failed; email is not sent.
 
@@ -58,7 +58,7 @@ Send_Email/Email.py          SMTP send
 src/pipeline.py              TSETMC batch
 src/calculator.py            classify + value
 src/report_generator.py      HTML
-output/                      HTML on success (gold_redemptions-YYYY-MM-DD-HH-MM.html)
+output/                      HTML on success (intra-day-gold-redemptions-YYYY-MM-DD-HH-MM.html)
 output_error/                all-zero or validation failure
 logs/orchestration_log.txt   ReportName, SendDate (both include HH:MM), generate/email flags
 logs/                        gold_redemptions.log (all runs; each line has Tehran date and time)

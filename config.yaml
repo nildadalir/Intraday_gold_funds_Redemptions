@@ -21,6 +21,7 @@ paths:
 
 report:
   basename: gold_redemptions
+  file_prefix: intra-day-gold-redemptions
 
 # Gold ETF cash market (Tehran). Used only to explain all-zero runs in the log.
 market:

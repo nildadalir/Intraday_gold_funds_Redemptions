@@ -73,8 +73,8 @@ def _tehran_now(at: datetime | None = None) -> datetime:
 
 
 def report_filename(at: datetime | None = None) -> str:
-    """HTML name: gold_redemptions-YYYY-MM-DD-HH-MM.html (Windows-safe)."""
-    return f"{config.REPORT_BASENAME}-{session_stamp(at)}.html"
+    """HTML name: intra-day-gold-redemptions-YYYY-MM-DD-HH-MM.html (Windows-safe)."""
+    return f"{config.REPORT_FILE_PREFIX}-{session_stamp(at)}.html"
 
 
 def session_stamp(at: datetime | None = None) -> str:

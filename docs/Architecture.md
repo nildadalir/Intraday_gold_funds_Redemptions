@@ -92,7 +92,7 @@ report/template.html        Turquoise layout
 | `logs/orchestration_log.txt` | Every pipeline attempt |
 | `logs/gold_redemptions.log` | TSETMC / processing log (all runs; each line has Tehran date and time) |
 
-Filename: `gold_redemptions-YYYY-MM-DD-HH-MM.html` (Gregorian, Tehran; hyphens in the time so Windows can store the file). Display / email subject: `gold_redemptions YYYY-MM-DD HH:MM`. The HTML page title inside the file is unchanged.
+Filename: `intra-day-gold-redemptions-YYYY-MM-DD-HH-MM.html` (Gregorian, Tehran; hyphens in the time so Windows can store the file). Display / email subject: `gold_redemptions YYYY-MM-DD HH:MM`. The HTML page title inside the file is unchanged.
 
 ---
 
