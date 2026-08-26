@@ -1,4 +1,4 @@
-# Intra-Day Gold Redemptions
+# gold_redemptions
 
 Daily gold-fund redemption valuation. Layout follows the Turquoise BI orchestrator: generate → validate → send → log.
 
@@ -7,7 +7,7 @@ Daily gold-fund redemption valuation. Layout follows the Turquoise BI orchestrat
 | Entry | `python run.py` |
 | Orchestrator | [`src/orchestration.py`](src/orchestration.py) |
 | Settings | [`config.yaml`](config.yaml) |
-| Last updated | 2026-08-25 |
+| Last updated | 2026-08-26 |
 
 Formulas: [`docs/Logic_Documentation.md`](docs/Logic_Documentation.md). Modules: [`docs/Architecture.md`](docs/Architecture.md). Pipeline: [`docs/Orchestration.md`](docs/Orchestration.md). SQL: [`src/SQL/FundsList.sql`](src/SQL/FundsList.sql).
 
@@ -38,9 +38,9 @@ python run.py --force --no-send
 | Flag | Meaning |
 | --- | --- |
 | `--no-send` | Skip SMTP |
-| `--force` | Rebuild even if today is already logged successful |
+| `--force` | Rebuild HTML even if this HH:MM snapshot is already logged successful |
 
-The session date is **today** (Gregorian, `Asia/Tehran`). A day is finished only when **both** `IsSuccessfulGenerate` and `IsSuccessfulEmail` are `yes` (email not required if `email.send` is false or `--no-send`). `python run.py` does not email a completed **today** again, and it does **not** backfill old dates from the log (live TSETMC, not warehouse sessions). If generate succeeded and SMTP failed, existing HTML is reused and only email is retried.
+Each run uses Tehran **date and time** (`YYYY-MM-DD HH:MM`). The HTML file is `gold_redemptions-YYYY-MM-DD-HH-MM.html`, so later runs do not overwrite earlier ones. Skip/reuse apply only to that exact timestamp (re-running in the same minute). `python run.py` does **not** backfill old dates from the log (live TSETMC, not warehouse sessions). If generate succeeded and SMTP failed, the next run attaches that HTML with the new report (at most those two files). Older unsent reports are not carried further.
 
 All-zero values (closed market or before open): HTML goes to `output_error/`; generate is logged failed; email is not sent.
 
@@ -58,10 +58,10 @@ Send_Email/Email.py          SMTP send
 src/pipeline.py              TSETMC batch
 src/calculator.py            classify + value
 src/report_generator.py      HTML
-output/                      HTML on success
+output/                      HTML on success (gold_redemptions-YYYY-MM-DD-HH-MM.html)
 output_error/                all-zero or validation failure
-data/orchestration_log.txt   ReportName, SendDate, IsSuccessfulGenerate, IsSuccessfulEmail, Isnonworking
-logs/                        TSETMC run log
+logs/orchestration_log.txt   ReportName, SendDate (both include HH:MM), generate/email flags
+logs/                        gold_redemptions.log (all runs; each line has Tehran date and time)
 ```
 
 Log rows older than **100 days** (`logging.retention_days`) are dropped on each run.
@@ -76,23 +76,20 @@ All email settings live in [`config.yaml`](config.yaml) under `email:`:
 email:
   send: true
   to:
-    - someone@iidic.com
+    - solhjoo@iidic.com
   cc:
-    - manager@iidic.com
-  subject: "Intra-Day Gold Redemptions"
+    - navabzadeh@iidic.com
+    - dalirnia@iidic.com
   body: |
-    Dear colleague,
-
-    Please find attached the intra-day gold redemptions report for {{Date}}.
-
-    Best regards,
-    FirouzehBI
+    با سلام و احترام
+    گزارش {gold_redemptions} اجرا شده در ساعت {TIME} تاریخ {DATE} پیوست شده است.
+    تیم BI
   smtp_server: "192.168.200.6"
   smtp_port: 25
   sender: "dalirnia@iidic.com"
 ```
 
-`{{Date}}` is replaced with the session date. `--no-send` still skips SMTP for that run. The pipeline calls `Send_Email/Email.py` and attaches the HTML from `output/` only.
+The subject is the report name (`gold_redemptions YYYY-MM-DD HH:MM`). `{DATE}` and `{TIME}` are filled from the Tehran stamp. The SMTP helper wraps the body as RTL Persian. `--no-send` still skips SMTP for that run. The pipeline calls `Send_Email/Email.py` and attaches the HTML from `output/` only.
 
 ---
 

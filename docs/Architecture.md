@@ -89,10 +89,10 @@ report/template.html        Turquoise layout
 | --- | --- |
 | `output/*.html` | At least one non-zero institutional value, validate OK |
 | `output_error/*.html` | All values 0, or HTML validation failed |
-| `data/orchestration_log.txt` | Every pipeline attempt |
-| `logs/intra_day_gold_redemptions.log` | TSETMC / processing log |
+| `logs/orchestration_log.txt` | Every pipeline attempt |
+| `logs/gold_redemptions.log` | TSETMC / processing log (all runs; each line has Tehran date and time) |
 
-Filename: `intra-day-gold-redemptions-YYYY-MM-DD.html` (Gregorian, Tehran date).
+Filename: `gold_redemptions-YYYY-MM-DD-HH-MM.html` (Gregorian, Tehran; hyphens in the time so Windows can store the file). Display / email subject: `gold_redemptions YYYY-MM-DD HH:MM`. The HTML page title inside the file is unchanged.
 
 ---
 
