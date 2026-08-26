@@ -46,11 +46,6 @@ def _to_jalali(dt: datetime) -> jdatetime.datetime:
     return jdatetime.datetime.fromgregorian(datetime=naive)
 
 
-def _fmt_jalali_date(dt: datetime) -> str:
-    jdt = _to_jalali(dt)
-    return f"{jdt.year:04d}-{jdt.month:02d}-{jdt.day:02d}"
-
-
 def _fmt_jalali_datetime(dt: datetime) -> str:
     jdt = _to_jalali(dt)
     return (
@@ -125,7 +120,6 @@ def render_html_report(
     template = env.get_template(config.TEMPLATE_PATH.name)
     html = template.render(
         generated_at=_fmt_jalali_datetime(now),
-        report_date=_fmt_jalali_date(now),
         redemption_funds=[_row_dict(r) for r in redemption],
         issue_redemption_funds=[_row_dict(r) for r in issue],
         errors=[
