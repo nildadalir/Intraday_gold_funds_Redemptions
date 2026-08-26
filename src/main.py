@@ -1,5 +1,5 @@
 """
-Intra-Day Gold Redemptions — CLI
+gold_redemptions — CLI
 
   python run.py
   python run.py --no-send
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -23,19 +24,32 @@ if str(SRC) not in sys.path:
 
 import config  # noqa: E402
 from orchestration import run_daily_attempt  # noqa: E402
+from report_generator import TEHRAN  # noqa: E402
+
+
+def _tehran_converter(seconds: float | None = None):
+    if seconds is None:
+        dt = datetime.now(tz=TEHRAN)
+    else:
+        dt = datetime.fromtimestamp(seconds, tz=TEHRAN)
+    return dt.timetuple()
 
 
 def _setup_logging() -> None:
     config.LOG_DIR.mkdir(parents=True, exist_ok=True)
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s: %(message)s",
+        "%Y-%m-%d %H:%M:%S",
+    )
+    fmt.converter = _tehran_converter
     sh = logging.StreamHandler(sys.stdout)
     sh.setFormatter(fmt)
     root.handlers.clear()
     root.addHandler(sh)
     fh = RotatingFileHandler(
-        config.LOG_DIR / "intra_day_gold_redemptions.log",
+        config.LOG_DIR / f"{config.REPORT_BASENAME}.log",
         maxBytes=config.LOG_MAX_BYTES,
         backupCount=config.LOG_BACKUP_COUNT,
         encoding="utf-8",
@@ -47,12 +61,12 @@ def _setup_logging() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Intra-day gold redemption report")
+    parser = argparse.ArgumentParser(description="gold_redemptions")
     parser.add_argument("--no-send", action="store_true", help="Skip email")
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Rebuild HTML even if today is already logged complete",
+        help="Rebuild HTML even if this HH:MM snapshot is already logged complete",
     )
     args = parser.parse_args(argv)
 

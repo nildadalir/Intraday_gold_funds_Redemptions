@@ -1,4 +1,4 @@
-# Intra-Day Gold Redemptions — CLI entrypoint
+# gold_redemptions — CLI entrypoint
 #
 # Usage:
 #   python run.py

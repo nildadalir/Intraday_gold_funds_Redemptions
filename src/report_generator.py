@@ -70,22 +70,26 @@ def _row_dict(result: ValuationResult) -> dict[str, str]:
     }
 
 
+def _tehran_now(at: datetime | None = None) -> datetime:
+    now = at or datetime.now(tz=TEHRAN)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=TEHRAN)
+    return now.astimezone(TEHRAN)
+
+
 def report_filename(at: datetime | None = None) -> str:
-    now = at or datetime.now(tz=TEHRAN)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=TEHRAN)
-    else:
-        now = now.astimezone(TEHRAN)
-    return f"intra-day-gold-redemptions-{now.strftime('%Y-%m-%d')}.html"
+    """HTML name: gold_redemptions-YYYY-MM-DD-HH-MM.html (Windows-safe)."""
+    return f"{config.REPORT_BASENAME}-{session_stamp(at)}.html"
 
 
-def session_date(at: datetime | None = None) -> str:
-    now = at or datetime.now(tz=TEHRAN)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=TEHRAN)
-    else:
-        now = now.astimezone(TEHRAN)
-    return now.strftime("%Y-%m-%d")
+def session_stamp(at: datetime | None = None) -> str:
+    """Filename-safe Tehran stamp: YYYY-MM-DD-HH-MM."""
+    return _tehran_now(at).strftime("%Y-%m-%d-%H-%M")
+
+
+def session_log_stamp(at: datetime | None = None) -> str:
+    """Log / email stamp: YYYY-MM-DD HH:MM."""
+    return _tehran_now(at).strftime("%Y-%m-%d %H:%M")
 
 
 def all_calculated_values_zero(results: list[ValuationResult]) -> bool:

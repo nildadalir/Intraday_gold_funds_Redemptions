@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import config
@@ -23,19 +24,12 @@ class BatchSummary:
     errors: list[ErrorRecord] = field(default_factory=list)
     report_path: Path | None = None
 
-    @property
-    def ok_count(self) -> int:
-        return len(self.processed)
-
-    @property
-    def error_count(self) -> int:
-        return len(self.errors)
-
 
 def run_batch(
     *,
     funds: list[FundPair] | None = None,
     output_path: Path | None = None,
+    generated_at: datetime | None = None,
 ) -> BatchSummary:
     if funds is None:
         funds, structural = group_funds()
@@ -52,7 +46,7 @@ def run_batch(
         logger.error("%s", msg)
 
     workers = config.BATCH_MAX_WORKERS
-    logger.info("Batch: funds=%s workers=%s shared_client=true", len(funds), workers)
+    logger.info("Batch: funds=%s workers=%s", len(funds), workers)
 
     def _accept(result: ValuationResult | ErrorRecord) -> None:
         if isinstance(result, ErrorRecord):
@@ -83,6 +77,9 @@ def run_batch(
         )
 
     summary.report_path = render_html_report(
-        summary.processed, summary.errors, output_path=output_path
+        summary.processed,
+        summary.errors,
+        output_path=output_path,
+        generated_at=generated_at,
     )
     return summary

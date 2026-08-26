@@ -84,7 +84,10 @@ LOG_RETENTION_DAYS = int(_LOG.get("retention_days", 100))
 _http_level = str(_LOG.get("http_level", "WARNING")).upper()
 LOG_HTTP_LEVEL = getattr(logging, _http_level, logging.WARNING)
 
-ORCHESTRATION_LOG = _path("orchestration_log", "data/orchestration_log.txt")
+ORCHESTRATION_LOG = _path("orchestration_log", "logs/orchestration_log.txt")
+
+_REPORT = _CFG.get("report") or {}
+REPORT_BASENAME = str(_REPORT.get("basename", "gold_redemptions"))
 
 _EMAIL = _CFG.get("email") or {}
 
@@ -106,7 +109,6 @@ def _email_list(value: Any) -> list[str]:
 EMAIL_SEND = _as_bool(_EMAIL.get("send", False))
 EMAIL_TO = _email_list(_EMAIL.get("to"))
 EMAIL_CC = _email_list(_EMAIL.get("cc"))
-EMAIL_SUBJECT = str(_EMAIL.get("subject", "Intra-Day Gold Redemptions"))
 EMAIL_BODY = str(_EMAIL.get("body", ""))
 EMAIL_SMTP_SERVER = str(_EMAIL.get("smtp_server") or _EMAIL.get("email_server") or "")
 EMAIL_SMTP_PORT = int(_EMAIL.get("smtp_port") or _EMAIL.get("email_port") or 25)

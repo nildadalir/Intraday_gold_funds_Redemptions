@@ -12,7 +12,7 @@ from pathlib import Path
 import config
 from market_hours import is_gold_trading_weekday
 from pipeline import run_batch
-from report_generator import session_date
+from report_generator import TEHRAN, session_log_stamp, session_stamp
 
 logger = logging.getLogger(__name__)
 
@@ -175,12 +175,59 @@ def day_complete(row: LogRow | None, *, require_email: bool) -> bool:
     return row.email_successful == "yes"
 
 
-def report_name_for(session: str) -> str:
-    return f"GOLD_{session}"
+def report_display_name(log_stamp: str) -> str:
+    return f"{config.REPORT_BASENAME} {log_stamp}"
 
 
-def html_path_for(session: str) -> Path:
-    return config.OUTPUT_DIR / f"intra-day-gold-redemptions-{session}.html"
+def report_name_for(log_stamp: str) -> str:
+    return report_display_name(log_stamp)
+
+
+def html_path_for(file_stamp: str) -> Path:
+    return config.OUTPUT_DIR / f"{config.REPORT_BASENAME}-{file_stamp}.html"
+
+
+def html_path_for_report_name(report_name: str) -> Path:
+    stamp = report_name.strip()
+    for prefix in (config.REPORT_BASENAME, "gold_fund_redemption"):
+        if stamp.startswith(prefix):
+            stamp = stamp[len(prefix) :].strip()
+            break
+    else:
+        if stamp.upper().startswith("GOLD_"):
+            stamp = stamp[5:].strip()
+    file_stamp = stamp.replace(":", "-").replace(" ", "-")
+    return html_path_for(file_stamp)
+
+
+def _parse_send_datetime(send_date: str) -> datetime | None:
+    text = send_date.strip()
+    for fmt, width in (("%Y-%m-%d %H:%M", 16), ("%Y-%m-%d", 10)):
+        try:
+            return datetime.strptime(text[:width], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def previous_failed_email_row(path: Path, *, current_name: str) -> LogRow | None:
+    """Most recent generate-ok / email-failed snapshot other than current. At most one."""
+    latest_by_name: dict[str, LogRow] = {}
+    for row in read_log(path):
+        latest_by_name[row.report_name] = row
+
+    candidates: list[tuple[datetime, LogRow]] = []
+    for name, row in latest_by_name.items():
+        if name == current_name:
+            continue
+        if row.generate_successful != "yes" or row.email_successful != "no":
+            continue
+        stamp = _parse_send_datetime(row.send_date) or datetime.min
+        candidates.append((stamp, row))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0])
+    return candidates[-1][1]
 
 
 def isnonworking_label() -> str:
@@ -210,18 +257,40 @@ def _move_to_error(path: Path) -> Path:
     return dest
 
 
-def _drop_html_for_session(session: str) -> None:
+def _drop_html_for_session(file_stamp: str) -> None:
     for folder in (config.OUTPUT_DIR, config.OUTPUT_ERROR_DIR):
-        target = folder / f"intra-day-gold-redemptions-{session}.html"
+        target = folder / f"{config.REPORT_BASENAME}-{file_stamp}.html"
         if target.is_file():
             target.unlink()
 
 
-def format_email_body(template: str, report_date: str) -> str:
-    return template.replace("{{Date}}", report_date)
+def _split_log_stamp(log_stamp: str) -> tuple[str, str]:
+    text = log_stamp.strip()
+    if " " in text:
+        date_part, time_part = text.split(" ", 1)
+        return date_part, time_part
+    return text, ""
 
 
-def send_report_email(html_path: Path, report_date: str) -> bool:
+def format_email_body(template: str, stamps: list[str]) -> str:
+    dates: list[str] = []
+    times: list[str] = []
+    for stamp in stamps:
+        date_part, time_part = _split_log_stamp(stamp)
+        dates.append(date_part)
+        if time_part:
+            times.append(time_part)
+    date_text = " و ".join(dict.fromkeys(dates))
+    time_text = " و ".join(times)
+    return (
+        template.replace("{gold_redemptions}", config.REPORT_BASENAME)
+        .replace("{gold_fund_redemption}", config.REPORT_BASENAME)
+        .replace("{DATE}", date_text)
+        .replace("{TIME}", time_text)
+    )
+
+
+def send_report_email(html_paths: list[Path], stamps: list[str]) -> bool:
     if not config.EMAIL_SEND:
         return False
     if not config.EMAIL_TO:
@@ -229,21 +298,39 @@ def send_report_email(html_path: Path, report_date: str) -> bool:
         return False
     from Send_Email.Email import send_email
 
-    body = format_email_body(config.EMAIL_BODY, report_date)
+    if not html_paths:
+        raise ValueError("send_report_email requires at least one HTML path")
+    body = format_email_body(config.EMAIL_BODY, stamps)
+    subject = ", ".join(report_display_name(stamp) for stamp in stamps)
     send_email(
         email_receiver=config.EMAIL_TO,
-        email_subject=config.EMAIL_SUBJECT,
+        email_subject=subject,
         email_cc=config.EMAIL_CC or None,
-        email_directory=str(html_path.parent),
-        email_files=html_path.name,
+        email_directory=str(html_paths[0].parent),
+        email_files=[path.name for path in html_paths],
         body=body,
     )
     return True
 
 
+def attachments_for_send(html_path: Path, current_name: str) -> tuple[list[Path], LogRow | None]:
+    """Current file plus at most one earlier generate-ok / email-failed file still in output/."""
+    carry = previous_failed_email_row(config.ORCHESTRATION_LOG, current_name=current_name)
+    if carry is None:
+        return [html_path], None
+    previous_path = html_path_for_report_name(carry.report_name)
+    if not previous_path.is_file() or previous_path.resolve() == html_path.resolve():
+        return [html_path], None
+    logger.info(
+        "Including unsent report %s with this send (last two only)",
+        carry.report_name,
+    )
+    return [previous_path, html_path], carry
+
+
 def _log(
     report_name: str,
-    session: str,
+    send_date: str,
     *,
     generate_ok: bool | str,
     email_ok: bool | str,
@@ -251,7 +338,7 @@ def _log(
     append_log_row(
         config.ORCHESTRATION_LOG,
         report_name,
-        date.today().isoformat(),
+        send_date,
         generate_ok,
         email_ok,
         isnonworking=isnonworking_label(),
@@ -263,23 +350,25 @@ def run_daily_attempt(
     no_send: bool = False,
     force: bool = False,
 ) -> PipelineAttemptResult:
-    """Run generate → validate → send for Tehran *today* only (no historic catch-up)."""
+    """Run generate → validate → send for this Tehran HH:MM stamp (no historic catch-up)."""
     prune_log(config.ORCHESTRATION_LOG, config.LOG_RETENTION_DAYS)
-    session = session_date()
-    name = report_name_for(session)
+    now = datetime.now(tz=TEHRAN)
+    file_stamp = session_stamp(now)
+    log_stamp = session_log_stamp(now)
+    name = report_name_for(log_stamp)
     require_email = bool(config.EMAIL_SEND) and not no_send
     prior = latest_row_for_session(config.ORCHESTRATION_LOG, name)
 
     if force:
-        _drop_html_for_session(session)
+        _drop_html_for_session(file_stamp)
 
     if day_complete(prior, require_email=require_email) and not force:
         logger.info("%s already complete; skip", name)
         return PipelineAttemptResult(
-            session, name, True, output_path=html_path_for(session), skipped=True
+            log_stamp, name, True, output_path=html_path_for(file_stamp), skipped=True
         )
 
-    output_html = html_path_for(session)
+    output_html = html_path_for(file_stamp)
     reuse = (
         prior is not None
         and prior.generate_successful == "yes"
@@ -289,19 +378,19 @@ def run_daily_attempt(
 
     if reuse:
         html_path = output_html
-        logger.info("Reusing HTML for %s", session)
+        logger.info("Reusing HTML for %s", log_stamp)
     else:
-        summary = run_batch()
+        summary = run_batch(generated_at=now)
         html_path = summary.report_path
         if html_path is None:
-            _log(name, session, generate_ok=False, email_ok="skipped")
+            _log(name, log_stamp, generate_ok=False, email_ok="skipped")
             return PipelineAttemptResult(
-                session, name, False, errors=["No report path after generate"]
+                log_stamp, name, False, errors=["No report path after generate"]
             )
         if html_path.resolve().parent.resolve() == config.OUTPUT_ERROR_DIR.resolve():
-            _log(name, session, generate_ok=False, email_ok="skipped")
+            _log(name, log_stamp, generate_ok=False, email_ok="skipped")
             return PipelineAttemptResult(
-                session,
+                log_stamp,
                 name,
                 False,
                 error_path=html_path,
@@ -311,9 +400,9 @@ def run_daily_attempt(
     problems = validate_report_file(html_path)
     if problems:
         failed = _move_to_error(html_path)
-        _log(name, session, generate_ok=False, email_ok="skipped")
+        _log(name, log_stamp, generate_ok=False, email_ok="skipped")
         return PipelineAttemptResult(
-            session,
+            log_stamp,
             name,
             False,
             error_path=failed,
@@ -322,22 +411,24 @@ def run_daily_attempt(
         )
 
     if prior is not None and prior.email_successful == "yes" and require_email:
-        logger.info("Email already sent for %s; not sending again", session)
-        _log(name, session, generate_ok=True, email_ok=True)
+        logger.info("Email already sent for %s; not sending again", log_stamp)
+        _log(name, log_stamp, generate_ok=True, email_ok=True)
         return PipelineAttemptResult(
-            session, name, True, output_path=html_path, email_sent=False
+            log_stamp, name, True, output_path=html_path, email_sent=False
         )
 
     if not require_email:
-        _log(name, session, generate_ok=True, email_ok="skipped")
-        return PipelineAttemptResult(session, name, True, output_path=html_path)
+        _log(name, log_stamp, generate_ok=True, email_ok="skipped")
+        return PipelineAttemptResult(log_stamp, name, True, output_path=html_path)
 
+    html_paths, carry = attachments_for_send(html_path, name)
+    stamps = [carry.send_date, log_stamp] if carry is not None else [log_stamp]
     try:
-        sent = send_report_email(html_path, session)
+        sent = send_report_email(html_paths, stamps)
     except Exception as exc:
-        _log(name, session, generate_ok=True, email_ok=False)
+        _log(name, log_stamp, generate_ok=True, email_ok=False)
         return PipelineAttemptResult(
-            session,
+            log_stamp,
             name,
             False,
             output_path=html_path,
@@ -346,7 +437,9 @@ def run_daily_attempt(
         )
 
     email_ok: bool | str = True if sent else "skipped"
-    _log(name, session, generate_ok=True, email_ok=email_ok)
+    _log(name, log_stamp, generate_ok=True, email_ok=email_ok)
+    if sent and carry is not None:
+        _log(carry.report_name, carry.send_date, generate_ok=True, email_ok=True)
     return PipelineAttemptResult(
-        session, name, True, output_path=html_path, email_sent=bool(sent)
+        log_stamp, name, True, output_path=html_path, email_sent=bool(sent)
     )

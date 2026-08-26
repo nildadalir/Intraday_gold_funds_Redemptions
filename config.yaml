@@ -1,4 +1,4 @@
-# Intra-Day Gold Redemptions — configuration
+# gold_redemptions — configuration
 # Secrets use ${ENV_VAR} only (never commit real secrets).
 db:
   server: ${DB_SERVER}
@@ -17,7 +17,10 @@ paths:
   output_dir: "output"
   output_error_dir: "output_error"
   log_dir: "logs"
-  orchestration_log: "data/orchestration_log.txt"
+  orchestration_log: "logs/orchestration_log.txt"
+
+report:
+  basename: gold_redemptions
 
 # Gold ETF cash market (Tehran). Used only to explain all-zero runs in the log.
 market:
@@ -37,16 +40,16 @@ logging:
 
 email:
   send: false  # true = SMTP after a successful output/ report
-  to: []
-  cc: []
-  subject: "Intra-Day Gold Redemptions"
+  to:
+    - solhjoo@iidic.com
+  cc:
+    - navabzadeh@iidic.com
+    - dalirnia@iidic.com
+  # Subject is set at send time to: gold_redemptions YYYY-MM-DD HH:MM
   body: |
-    Dear colleague,
-
-    Please find attached the intra-day gold redemptions report for {{Date}}.
-
-    Best regards,
-    FirouzehBI
+    با سلام و احترام
+    گزارش {gold_redemptions} اجرا شده در ساعت {TIME} تاریخ {DATE} پیوست شده است.
+    تیم BI
   smtp_server: "192.168.200.6"
   smtp_port: 25
   sender: "dalirnia@iidic.com"
