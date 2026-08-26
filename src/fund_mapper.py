@@ -44,9 +44,7 @@ def load_source_rows() -> list[InstrumentRow]:
     if config.DB_USE_DB:
         from db_reader import load_instrument_rows as load_db_rows
 
-        logger.info("Instrument source: database (%s)", config.DB_DATABASE)
         return load_db_rows()
-    logger.info("Instrument source: Excel (%s)", config.EXCEL_PATH.name)
     return load_excel_rows()
 
 
@@ -85,11 +83,6 @@ def group_funds(rows: list[InstrumentRow] | None = None) -> tuple[list[FundPair]
 
         if not markets:
             # Non-listed / incomplete funds (e.g. غیر بورسی) — skip quietly.
-            logger.info(
-                "Skipping AssetId=%s (%s): no market instrument (*2)",
-                asset_id,
-                asset_name,
-            )
             continue
         # Prefer exact *2 name over other آد-لات matches.
         markets_sorted = sorted(
@@ -120,10 +113,5 @@ def group_funds(rows: list[InstrumentRow] | None = None) -> tuple[list[FundPair]
             )
         )
 
-    logger.info(
-        "Mapped %s funds by AssetId (%s structural issues)",
-        len(funds),
-        len(errors),
-    )
     return funds, errors
 

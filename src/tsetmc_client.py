@@ -65,18 +65,10 @@ class TsetmcClient:
         if proxy:
             kwargs["proxy"] = proxy
             logger.info("TSETMC proxy configured")
-        else:
-            logger.info("TSETMC proxy unset (direct)")
         self._client = httpx.Client(**kwargs)
 
     def close(self) -> None:
         self._client.close()
-
-    def __enter__(self) -> TsetmcClient:
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        self.close()
 
     @retry(
         reraise=True,

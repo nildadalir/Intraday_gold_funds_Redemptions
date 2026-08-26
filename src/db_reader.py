@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import pyodbc
 
 import config
 from excel_reader import ExcelReadError, InstrumentRow, parse_tse_id
-
-logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = (
     "Instrument",
@@ -112,11 +109,6 @@ def load_instrument_rows() -> list[InstrumentRow]:
                     market=market.strip(),
                 )
             )
-        logger.info(
-            "Loaded %s instrument rows from database (%s)",
-            len(out),
-            config.DB_QUERY_PATH.name,
-        )
         return out
     except DbReadError:
         raise

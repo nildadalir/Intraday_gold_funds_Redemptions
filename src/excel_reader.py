@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,8 +9,6 @@ from typing import Any
 from openpyxl import load_workbook
 
 import config
-
-logger = logging.getLogger(__name__)
 
 REQUIRED_COLUMNS = (
     "InstrumentId",
@@ -120,7 +117,6 @@ def load_instrument_rows(excel_path: Path | None = None) -> list[InstrumentRow]:
                     market=market.strip(),
                 )
             )
-        logger.info("Loaded %s instrument rows from %s", len(out), path.name)
         return out
     finally:
         wb.close()

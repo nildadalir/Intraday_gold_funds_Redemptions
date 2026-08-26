@@ -60,12 +60,6 @@ def value_fund(client: TsetmcClient, fund: FundPair) -> ValuationResult:
             legal_buy,
             legal_sell,
         )
-    if legal_buy <= 0:
-        logger.warning(
-            "Live legal volume is 0 for %s (TseId=%s); using page value 0",
-            market.instrument,
-            market.tse_id,
-        )
 
     category, price_key = classify(last, nav.redemption)
     if price_key == "nav_redemption":
@@ -78,17 +72,6 @@ def value_fund(client: TsetmcClient, fund: FundPair) -> ValuationResult:
         selected = nav.issue
 
     value = legal_buy * selected
-    logger.info(
-        "AssetId=%s %s last=%s nav_red=%s nav_issue=%s buy_N=%s %s value=%s",
-        fund.asset_id,
-        main.instrument,
-        last,
-        nav.redemption,
-        nav.issue,
-        legal_buy,
-        category,
-        value,
-    )
 
     return ValuationResult(
         instrument=main.instrument,
