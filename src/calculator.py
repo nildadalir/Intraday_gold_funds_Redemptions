@@ -92,7 +92,7 @@ def value_fund_safe(
     except Exception as exc:
         logger.error("Failed AssetId=%s: %s", fund.asset_id, exc)
         return ErrorRecord(
-            fund_name=fund.asset,
+            fund_name=fund.main.instrument,
             tse_id=fund.main.tse_id or "NULL",
             reason=str(exc),
         )
