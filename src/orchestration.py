@@ -25,6 +25,7 @@ LOG_HEADER = (
 )
 LOG_SEP = "\t"
 _EMPTY_HTML = re.compile(r"^\s*<html[^>]*>\s*</html>\s*$", re.I | re.S)
+_HTML_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,34 @@ def prune_log(path: Path, retention_days: int) -> None:
         if send_date >= cutoff:
             kept.append(_row_line(row))
     path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+
+
+def prune_html_reports(retention_days: int) -> None:
+    """Delete dated HTML in output/ and output_error/ older than retention_days."""
+    if retention_days <= 0:
+        return
+    cutoff = date.today() - timedelta(days=retention_days)
+    removed = 0
+    for folder in (config.OUTPUT_DIR, config.OUTPUT_ERROR_DIR):
+        if not folder.is_dir():
+            continue
+        for path in folder.glob("*.html"):
+            match = _HTML_DATE_RE.search(path.name)
+            if not match:
+                continue
+            try:
+                file_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if file_date < cutoff:
+                path.unlink()
+                removed += 1
+    if removed:
+        logger.info(
+            "Removed %s HTML report(s) older than %s days",
+            removed,
+            retention_days,
+        )
 
 
 def latest_row_for_session(path: Path, report_name: str) -> LogRow | None:
@@ -352,6 +381,7 @@ def run_daily_attempt(
 ) -> PipelineAttemptResult:
     """Run generate → validate → send for this Tehran HH:MM stamp (no historic catch-up)."""
     prune_log(config.ORCHESTRATION_LOG, config.LOG_RETENTION_DAYS)
+    prune_html_reports(config.REPORT_RETENTION_DAYS)
     now = datetime.now(tz=TEHRAN)
     file_stamp = session_stamp(now)
     log_stamp = session_log_stamp(now)

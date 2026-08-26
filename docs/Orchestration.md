@@ -44,6 +44,9 @@ python run.py
  prune orchestration log (retention_days)
         │
         ▼
+ prune HTML in output/ and output_error/ (report.retention_days)
+        │
+        ▼
  Tehran YYYY-MM-DD HH:MM
         │
         ├── this stamp already generate+email yes → skip
@@ -115,6 +118,6 @@ File: `logs/orchestration_log.txt` (TSV).
 
 A stamp is **complete** when generate is `yes` and, if email is required, email is `yes`. Then the job skips **that HH:MM only**. Incomplete rows for older stamps in the log are **not** replayed.
 
-Rows older than `logging.retention_days` (100) are dropped each run.
+Rows older than `logging.retention_days` (100) are dropped each run. HTML in `output/` and `output_error/` older than `report.retention_days` (10) is deleted each run.
 
 TSETMC detail stays in `logs/gold_redemptions.log`. Each line has Tehran date and time.

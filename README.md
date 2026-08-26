@@ -64,7 +64,7 @@ logs/orchestration_log.txt   ReportName, SendDate (both include HH:MM), generate
 logs/                        gold_redemptions.log (all runs; each line has Tehran date and time)
 ```
 
-Log rows older than **100 days** (`logging.retention_days`) are dropped on each run.
+Log rows older than **100 days** (`logging.retention_days`) are dropped on each run. HTML in `output/` and `output_error/` older than **10 days** (`report.retention_days`) is deleted on each run.
 
 ---
 
