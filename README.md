@@ -76,9 +76,7 @@ All email settings live in [`config.yaml`](config.yaml) under `email:`:
 email:
   send: true
   to:
-    - solhjoo@iidic.com
   cc:
-    - navabzadeh@iidic.com
     - dalirnia@iidic.com
   body: |
     با سلام و احترام
