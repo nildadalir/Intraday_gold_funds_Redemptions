@@ -5,7 +5,7 @@ db:
   database: DW
   driver: "ODBC Driver 17 for SQL Server"
   trusted_connection: false  # true = Windows auth; else DB_USERNAME / DB_PASSWORD in .env
-  use_db: true  # true gets funds list from database; false uses Excel
+  use_db: false  # true gets funds list from database; false uses Excel
   username: ${DB_USERNAME}
   password: ${DB_PASSWORD}
   query_file: "src/SQL/FundsList.sql"
