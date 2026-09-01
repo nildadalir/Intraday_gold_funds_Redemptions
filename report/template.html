@@ -79,8 +79,12 @@
                     <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">&nbsp;</div>
                   </th>
                   <th align="right" valign="top" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
+                    <div>Price</div>
+                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">IRR</div>
+                  </th>
+                  <th align="right" valign="top" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
                     <div>NAV</div>
-                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">IRT</div>
+                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">IRR</div>
                   </th>
                   <th align="right" valign="top" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
                     <div>Institutional volume</div>
@@ -88,13 +92,14 @@
                   </th>
                   <th align="right" valign="top" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
                     <div>Institutional Value</div>
-                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">B IRT</div>
+                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">B IRR</div>
                   </th>
                 </tr>
                 {% if redemption_funds %}
                   {% for row in redemption_funds %}
                 <tr>
                   <td style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.instrument }}</td>
+                  <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.price_fmt }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.price_used_fmt }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.institutional_volume_fmt }}</td>
                   <td align="right" style="padding:10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.institutional_value_fmt }}</td>
@@ -102,7 +107,7 @@
                   {% endfor %}
                 {% else %}
                 <tr>
-                  <td colspan="4" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No redemption funds</td>
+                  <td colspan="5" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No redemption funds</td>
                 </tr>
                 {% endif %}
               </table>
@@ -121,8 +126,12 @@
                     <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">&nbsp;</div>
                   </th>
                   <th align="right" valign="top" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
+                    <div>Price</div>
+                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">IRR</div>
+                  </th>
+                  <th align="right" valign="top" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
                     <div>NAV</div>
-                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">IRT</div>
+                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">IRR</div>
                   </th>
                   <th align="right" valign="top" style="padding:0 6px 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
                     <div>Institutional volume</div>
@@ -130,13 +139,14 @@
                   </th>
                   <th align="right" valign="top" style="padding:0 0 8px 0;font-size:10px;letter-spacing:0.5px;font-weight:bold;">
                     <div>Institutional Value</div>
-                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">B IRT</div>
+                    <div style="font-size:8px;font-weight:normal;color:#8a97a0;letter-spacing:0.4px;line-height:1.2;margin-top:2px;">B IRR</div>
                   </th>
                 </tr>
                 {% if issue_redemption_funds %}
                   {% for row in issue_redemption_funds %}
                 <tr>
                   <td style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.instrument }}</td>
+                  <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.price_fmt }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.price_used_fmt }}</td>
                   <td align="right" style="padding:10px 6px 10px 0;border-top:1px solid #eaeef1;color:#3a4750;">{{ row.institutional_volume_fmt }}</td>
                   <td align="right" style="padding:10px 0;border-top:1px solid #eaeef1;color:#0f1c24;font-weight:bold;">{{ row.institutional_value_fmt }}</td>
@@ -144,7 +154,7 @@
                   {% endfor %}
                 {% else %}
                 <tr>
-                  <td colspan="4" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No issue/redemption funds</td>
+                  <td colspan="5" style="padding:12px 0;border-top:1px solid #eaeef1;color:#8a97a0;font-style:italic;">No issue/redemption funds</td>
                 </tr>
                 {% endif %}
               </table>

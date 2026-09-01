@@ -32,6 +32,12 @@ class TsetmcDataError(TsetmcError):
 
 
 @dataclass(frozen=True)
+class ClosingPriceInfo:
+    last_trade: float
+    closing: float  # قیمت پایانی
+
+
+@dataclass(frozen=True)
 class EtfNav:
     redemption: float
     issue: float | None
@@ -99,19 +105,33 @@ class TsetmcClient:
             raise TsetmcDataError(f"Unexpected JSON root for {path}")
         return payload
 
-    def get_last_trade_price(self, tse_id: str) -> float:
-        """Last trade from ClosingPriceInfo."""
+    def get_closing_price_info(self, tse_id: str) -> ClosingPriceInfo:
+        """Last trade and قیمت پایانی from the first (main) market board."""
         payload = self._get_json(
             f"/api/ClosingPrice/GetClosingPriceInfo/{tse_id}"
         )
         info = payload.get("closingPriceInfo")
-        if isinstance(info, dict):
-            raw = info.get("pDrCotVal") or info.get("pl") or info.get("pClosing")
-            if raw is not None and float(raw) > 0:
-                return float(raw)
-        raise TsetmcDataError(
-            f"Missing Last Trade Price for TseId={tse_id}: ClosingPriceInfo empty/invalid"
-        )
+        if not isinstance(info, dict):
+            raise TsetmcDataError(
+                f"Missing ClosingPriceInfo for TseId={tse_id}"
+            )
+        last_raw = info.get("pDrCotVal") or info.get("pl") or info.get("pClosing")
+        closing_raw = info.get("pClosing")
+        last = float(last_raw) if last_raw is not None else 0.0
+        closing = float(closing_raw) if closing_raw is not None else 0.0
+        if last <= 0:
+            raise TsetmcDataError(
+                f"Missing Last Trade Price for TseId={tse_id}: ClosingPriceInfo empty/invalid"
+            )
+        if closing <= 0:
+            raise TsetmcDataError(
+                f"Missing قیمت پایانی (pClosing) for TseId={tse_id}"
+            )
+        return ClosingPriceInfo(last_trade=last, closing=closing)
+
+    def get_last_trade_price(self, tse_id: str) -> float:
+        """Last trade from ClosingPriceInfo."""
+        return self.get_closing_price_info(tse_id).last_trade
 
     def get_etf_nav(self, tse_id: str) -> EtfNav:
         payload = self._get_json(f"/api/Fund/GetETFByInsCode/{tse_id}")

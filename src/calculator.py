@@ -17,6 +17,7 @@ Category = Literal["Redemption", "Issue/Redemption"]
 @dataclass(frozen=True)
 class ValuationResult:
     instrument: str
+    closing_price: float  # قیمت پایانی on the first (main) market
     legal_buy_volume: float
     selected_price: float
     calculated_value: float
@@ -47,7 +48,8 @@ def value_fund(client: TsetmcClient, fund: FundPair) -> ValuationResult:
     market = fund.market
     assert main.tse_id and market.tse_id
 
-    last = client.get_last_trade_price(main.tse_id)
+    prices = client.get_closing_price_info(main.tse_id)
+    last = prices.last_trade
     nav = client.get_etf_nav(main.tse_id)
     volumes = client.get_legal_volumes(market.tse_id)
     legal_buy = volumes.buy_n_volume
@@ -75,6 +77,7 @@ def value_fund(client: TsetmcClient, fund: FundPair) -> ValuationResult:
 
     return ValuationResult(
         instrument=main.instrument,
+        closing_price=prices.closing,
         legal_buy_volume=legal_buy,
         selected_price=selected,
         calculated_value=value,
