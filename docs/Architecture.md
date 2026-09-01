@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Document status | Current |
-| Last updated | 2026-08-25 |
+| Last updated | 2026-09-01 |
 | Related documents | [`Logic_Documentation.md`](Logic_Documentation.md), [`Orchestration.md`](Orchestration.md) |
 
 ---
@@ -20,12 +20,12 @@ Update this file when purpose, modules, data flow, or input/output contracts cha
 
 Daily **intraday gold-ETF redemption valuation** for Turquoise Asset Management.
 
-Instruments are grouped by **AssetId**. The **main** board supplies last trade and NAV. The **\*2 / آد-لات** board supplies live institutional (حقوقی) buy volume. Each fund is classified as **Redemption** or **Issue/Redemption**, then valued as volume × selected NAV.
+Instruments are grouped by **AssetId**. The **main** board (first market / اصلی) supplies last trade, قیمت پایانی, and NAV. The **\*2 / آد-لات** board supplies live institutional (حقوقی) buy volume. Each fund is classified as **Redemption** or **Issue/Redemption**, then valued as volume × selected NAV.
 
 ### 2.1 In scope
 
 - Load gold ETF instruments from Excel or SQL Server (`config.yaml` `db.use_db`)
-- Fetch last price, ETF NAV, and ClientType volume from TSETMC CDN
+- Fetch last price, قیمت پایانی (`pClosing`), ETF NAV, and ClientType volume from TSETMC CDN
 - Classify and value funds; write one HTML report
 - Route all-zero reports to `output_error/`; successful reports to `output/`
 - Validate HTML, optionally email, write an orchestration log
@@ -43,7 +43,7 @@ Instruments are grouped by **AssetId**. The **main** board supplies last trade a
 | Term | Meaning |
 | --- | --- |
 | **AssetId** | Warehouse key that groups main + market-board rows of one gold fund |
-| **Main board** | Name without a `2` suffix and market text containing `اصلی` — last price + NAV |
+| **Main board** | Name without a `2` suffix and market text containing `اصلی` — last price, قیمت پایانی, NAV |
 | **Market board** | Instrument ending in `2`, or market containing `آد` — حقوقی volume |
 | **Institutional value** | `buy_N_Volume ×` selected NAV (Rial internally) |
 
@@ -54,7 +54,7 @@ Instruments are grouped by **AssetId**. The **main** board supplies last trade a
 | Input | Source |
 | --- | --- |
 | Instrument list | Excel `data/طلا.xlsx` or `src/SQL/FundsList.sql` against DW `DimInstrument` |
-| Last trade, NAV | TSETMC `GetClosingPriceInfo`, `GetETFByInsCode` on main `TseId` |
+| Last trade, قیمت پایانی, NAV | TSETMC `GetClosingPriceInfo` (`pClosing` = report Price), `GetETFByInsCode` on main `TseId` |
 | Legal volume | TSETMC `GetClientType` on market `TseId` (`buy_N_Volume`) |
 | Secrets | `.env` (`DB_SERVER`, `DB_USERNAME`, `DB_PASSWORD`, optional `TSETMC_PROXY`) |
 | Runtime settings | [`config.yaml`](../config.yaml) via [`config.py`](../config.py) |
@@ -100,6 +100,8 @@ Filename: `intra-day-gold-redemptions-YYYY-MM-DD-HH-MM.html` (Gregorian, Tehran;
 
 | Date | Decision |
 | --- | --- |
-| 2026-08 | TSETMC money stays Rial in the calculator; report converts to Toman / billion Toman |
+| 2026-08 | TSETMC money stays Rial in the calculator |
+| 2026-09 | Report shows Price/NAV in IRR (Rial) and Institutional Value in billion IRR |
 | 2026-08 | All-zero reports go to `output_error/` and are not emailed |
 | 2026-08 | Orchestration matches ShareHolding order: generate → validate → send → log |
+| 2026-09 | Report **Price** column is first-market `pClosing` (قیمت پایانی), shown before NAV; classification still uses last trade |

@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Document status | Current |
-| Last updated | 2026-08-25 |
+| Last updated | 2026-09-01 |
 | Related documents | [`Architecture.md`](Architecture.md) |
 
 ---
@@ -27,11 +27,12 @@ When the list comes from SQL, `Asset` and `InstrumentId` are filled from `Instru
 
 | Need | Endpoint | Instrument |
 | --- | --- | --- |
-| Last trade | `/api/ClosingPrice/GetClosingPriceInfo/{TseId}` (`pDrCotVal` / `pl` / `pClosing`) | Main |
+| Last trade | `/api/ClosingPrice/GetClosingPriceInfo/{TseId}` (`pDrCotVal` / `pl` / `pClosing`) | Main (first market / اصلی) |
+| قیمت پایانی | Same `GetClosingPriceInfo` (`pClosing`) | Main (first market / اصلی) |
 | NAV redemption / issue | `/api/Fund/GetETFByInsCode/{TseId}` (`pRedTran`, `pSubTran`) | Main |
 | حقوقی volume | `/api/ClientType/GetClientType/{TseId}/1/0` (`buy_N_Volume`) | Market (`*2`) |
 
-Last trade is **only** used to classify. The report **NAV** column is the selected NAV (redemption or issue), not last trade.
+Last trade is **only** used to classify. The report **Price** column is `pClosing` (قیمت پایانی) from the first market. The report **NAV** column is the selected NAV (redemption or issue), not last trade.
 
 Internal units from TSETMC are **Rial**.
 
@@ -52,9 +53,10 @@ If live legal buy volume is 0, value is 0 (page value). Buy/sell mismatch logs a
 
 | Column | Display |
 | --- | --- |
-| NAV | Toman = Rial / 10 (integer) |
+| Price | Rial / IRR (integer); `pClosing` on the first market |
+| NAV | Rial / IRR (integer) |
 | Institutional volume | Unit count (not converted) |
-| Institutional value | Billion Toman = Rial / 10 / 1e9 |
+| Institutional value | Billion Rial / IRR = Rial / 1e9 |
 
 Header date and “generated at” are **Jalali** with English digits. Output **filename** stays Gregorian.
 
