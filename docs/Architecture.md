@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Document status | Current |
-| Last updated | 2026-09-01 |
+| Last updated | 2026-09-20 |
 | Related documents | [`Logic_Documentation.md`](Logic_Documentation.md), [`Orchestration.md`](Orchestration.md) |
 
 ---
@@ -18,7 +18,7 @@ Update this file when purpose, modules, data flow, or input/output contracts cha
 
 ## 2. Project purpose
 
-Daily **intraday gold-ETF redemption valuation** for Turquoise Asset Management.
+Daily **intraday gold-ETF redemption valuation** during the Tehran cash-market session.
 
 Instruments are grouped by **AssetId**. The **main** board (first market / اصلی) supplies last trade, قیمت پایانی, and NAV. The **\*2 / آد-لات** board supplies live institutional (حقوقی) buy volume. Each fund is classified as **Redemption** or **Issue/Redemption**, then valued as volume × selected NAV.
 
@@ -32,7 +32,7 @@ Instruments are grouped by **AssetId**. The **main** board (first market / اص�
 
 ### 2.2 Out of scope (current)
 
-- Shamsi warehouse session catch-up (ShareHolding-style `--date` lists)
+- Historic session catch-up (`--date` lists of past warehouse days)
 - Last-trade as the report NAV column (last trade is only for classification)
 - `pytse-client` (HTTP is `httpx` to `cdn.tsetmc.com`)
 
@@ -53,10 +53,10 @@ Instruments are grouped by **AssetId**. The **main** board (first market / اص�
 
 | Input | Source |
 | --- | --- |
-| Instrument list | Excel `data/طلا.xlsx` or `src/SQL/FundsList.sql` against DW `DimInstrument` |
+| Instrument list | Excel `data/طلا.xlsx` or `src/SQL/FundsList.sql` against the configured SQL Server database |
 | Last trade, قیمت پایانی, NAV | TSETMC `GetClosingPriceInfo` (`pClosing` = report Price), `GetETFByInsCode` on main `TseId` |
 | Legal volume | TSETMC `GetClientType` on market `TseId` (`buy_N_Volume`) |
-| Secrets | `.env` (`DB_SERVER`, `DB_USERNAME`, `DB_PASSWORD`, optional `TSETMC_PROXY`) |
+| Secrets | `.env` (`DB_SERVER`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`, optional `TSETMC_PROXY` and SMTP `EMAIL_*` vars) |
 | Runtime settings | [`config.yaml`](../config.yaml) via [`config.py`](../config.py) |
 
 SQL filter (do not change without a product decision) is in [`src/SQL/FundsList.sql`](../src/SQL/FundsList.sql): gold ETFs, exclude اختیار / شمش.
@@ -78,7 +78,8 @@ src/calculator.py           classify + value
 src/report_generator.py     Jinja HTML, Rial→display units
 src/market_hours.py         Tehran Sat–Wed 12:00–18:00
 Send_Email/Email.py         SMTP
-report/template.html        Turquoise layout
+report/template.html        HTML report layout
+examples/                   layout sample (no live market figures)
 ```
 
 ---
@@ -103,5 +104,5 @@ Filename: `intra-day-gold-redemptions-YYYY-MM-DD-HH-MM.html` (Gregorian, Tehran;
 | 2026-08 | TSETMC money stays Rial in the calculator |
 | 2026-09 | Report shows Price/NAV in IRR (Rial) and Institutional Value in billion IRR |
 | 2026-08 | All-zero reports go to `output_error/` and are not emailed |
-| 2026-08 | Orchestration matches ShareHolding order: generate → validate → send → log |
+| 2026-08 | Orchestration order: generate → validate → send → log |
 | 2026-09 | Report **Price** column is first-market `pClosing` (قیمت پایانی), shown before NAV; classification still uses last trade |
