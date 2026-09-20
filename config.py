@@ -64,7 +64,7 @@ TEMPLATE_PATH = _path("report_template", "report/template.html")
 
 _DB = _CFG.get("db") or {}
 DB_SERVER = str(_DB.get("server") or "")
-DB_DATABASE = str(_DB.get("database", ""))
+DB_DATABASE = str(_DB.get("database") or "")
 DB_DRIVER = str(_DB.get("driver", "ODBC Driver 17 for SQL Server"))
 DB_TRUSTED_CONNECTION = bool(_DB.get("trusted_connection", False))
 DB_USE_DB = bool(_DB.get("use_db", False))
