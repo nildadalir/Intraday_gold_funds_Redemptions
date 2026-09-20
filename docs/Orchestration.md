@@ -28,7 +28,7 @@ python run.py --force --no-send
 
 There is no `--date`. Each run is stamped with Tehran **date and time** (`YYYY-MM-DD HH:MM`). Gold is a live TSETMC snapshot, not a warehouse `DateKey`.
 
-Unlike ShareHolding, this job **does not** walk the log and regenerate missed **past** calendar days. TSETMC data is live: a late run would fetch *now*, not last Saturday’s tape. Skip/reuse apply only to the **same** HH:MM stamp (re-running in the same minute). A later run writes a new HTML file.
+This job **does not** walk the log and regenerate missed **past** calendar days. TSETMC data is live: a late run would fetch *now*, not an earlier session. Skip/reuse apply only to the **same** HH:MM stamp (re-running in the same minute). A later run writes a new HTML file.
 
 ---
 
