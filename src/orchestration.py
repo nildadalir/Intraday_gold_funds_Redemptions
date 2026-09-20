@@ -1,4 +1,4 @@
-"""Generate → validate → send → log (ShareHolding-style, gold-specific)."""
+"""Generate → validate → send → log for the gold redemption report."""
 
 from __future__ import annotations
 
