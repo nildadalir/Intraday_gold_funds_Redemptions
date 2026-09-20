@@ -41,10 +41,13 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# Secrets
+# Secrets and local overrides
 .env
 .env.*
 !.env.example
+secrets.json
+credentials.json
+*.pfx
 
 # Logs and generated reports
 logs/
