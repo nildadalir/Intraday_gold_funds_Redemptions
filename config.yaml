@@ -1,8 +1,8 @@
 # gold_redemptions — configuration
-# Secrets use ${ENV_VAR} only (never commit real secrets).
+# Secrets use ${ENV_VAR} only (never commit real secrets). Copy .env.example to .env.
 db:
   server: ${DB_SERVER}
-  database: DW
+  database: ${DB_DATABASE}
   driver: "ODBC Driver 17 for SQL Server"
   trusted_connection: false  # true = Windows auth; else DB_USERNAME / DB_PASSWORD in .env
   use_db: false  # true gets funds list from database; false uses Excel
@@ -42,19 +42,16 @@ logging:
 
 email:
   send: false  # true = SMTP after a successful output/ report
-  to:
-    - solhjoo@iidic.com
-  cc:
-    - navabzadeh@iidic.com
-    - dalirnia@iidic.com
+  to: ${EMAIL_TO}       # comma-separated recipients in .env
+  cc: ${EMAIL_CC}       # optional comma-separated CC list in .env
   # Subject is set at send time to: gold_redemptions YYYY-MM-DD HH:MM
   body: |
     با سلام و احترام
     گزارش {gold_redemptions} اجرا شده در ساعت {TIME} تاریخ {DATE} پیوست شده است.
     تیم BI
-  smtp_server: "192.168.200.6"
+  smtp_server: ${EMAIL_HOST}
   smtp_port: 25
-  sender: "dalirnia@iidic.com"
+  sender: ${EMAIL_USER}
   smtp_retries: 3
   smtp_retry_seconds: 10
   smtp_timeout: 30
@@ -72,4 +69,4 @@ api:
     Accept: "application/json, text/plain, */*"
     Accept-Language: "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7"
     Referer: "https://www.tsetmc.com/"
-    Origin: "https://www.tsetmc.com"
+    Origin: "https://www.tsetmc.com/"
