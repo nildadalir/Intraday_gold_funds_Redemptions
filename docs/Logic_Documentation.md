@@ -5,7 +5,7 @@
 | Field | Value |
 | --- | --- |
 | Document status | Current |
-| Last updated | 2026-09-01 |
+| Last updated | 2026-09-20 |
 | Related documents | [`Architecture.md`](Architecture.md) |
 
 ---
@@ -19,7 +19,7 @@ Rows are grouped by **AssetId**.
 
 Funds with no market board are skipped (not a structural error). Missing main board or missing `TseId` is a structural error on the HTML Error Summary.
 
-When the list comes from SQL, `Asset` and `InstrumentId` are filled from `Instrument` / `AssetId` (`DimInstrument` has no Asset column).
+When the list comes from SQL, `Asset` and `InstrumentId` are filled from `Instrument` / `AssetId` (the query does not return a separate Asset column).
 
 ---
 
