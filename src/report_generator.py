@@ -1,4 +1,4 @@
-"""HTML report renderer (Turquoise template — layout preserved)."""
+"""HTML report renderer (email-safe template)."""
 
 from __future__ import annotations
 
